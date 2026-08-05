@@ -1,10 +1,10 @@
 # Studienprojekt 2 – Sensorgestützte Sturzerkennung mittels ML-Modellen
 
-👉 **[PDF direkt öffnen](./LateX_Code/main.pdf)**
+👉 **[PDF direkt öffnen](./LateX_Code/main.tex)**
 
 ## Projektüberblick
 Dieses Repository enthält mein Studienprojekt an der TH Mittelhessen zur sensorgestützten Sturzerkennung mit Machine-Learning-Methoden.  
-Die Arbeit untersucht, wie gut unterschiedliche Inertialsensor-Konfigurationen (3-, 6- und 9-Achsen) für die Sturzerkennung geeignet sind und welche Kombination aus Genauigkeit, Robustheit und Energieeffizienz für den geplanten Einsatz in einer Schuheinlage am sinnvollsten ist.
+Die Arbeit untersucht, wie gut unterschiedliche Inertialsensor-Konfigurationen (3-, 6- und 9-Achsen) für die Sturzerkennung geeignet sind und welche Kombination aus Genauigkeit, Robustheit und Energieeffizienz am sinnvollsten ist.
 
 Die inhaltliche Grundlage dieser Beschreibung orientiert sich an `LateX_Code/main.tex`.
 
@@ -32,5 +32,4 @@ Die Aufgaben 1 bis 3 wurden inhaltlich vorbereitet und dokumentiert; als nächst
 ## Repository-Inhalt
 - `LateX_Code/main.tex` – Hauptdokument der wissenschaftlichen Ausarbeitung
 - `LateX_Code/references.bib` – Literaturverzeichnis
-- `LateX_Code/main.pdf` – kompilierte PDF-Fassung der Arbeit
 - `README.md` – Projektübersicht
