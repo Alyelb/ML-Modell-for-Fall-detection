@@ -1,0 +1,45 @@
+name: Build and update LaTeX PDF
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-pdf:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install LaTeX toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y latexmk texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended
+
+      - name: Compile LateX_Code/main.tex
+        run: |
+          latexmk -pdf -bibtex -interaction=nonstopmode -file-line-error LateX_Code/main.tex
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-pdf
+          path: LateX_Code/main.pdf
+          if-no-files-found: error
+
+      - name: Commit updated PDF if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: auto-build LaTeX PDF"
+          file_pattern: LateX_Code/main.pdf
+          commit_user_name: github-actions[bot]
+          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com

@@ -1,57 +1,147 @@
 # Studienprojekt 2 – Sensorgestützte Sturzerkennung mittels ML-Modellen
 
-👉 **[PDF direkt öffnen](./LateX_Code/main.pdf)**
+## PDF direkt öffnen
+- Direkter Link im Repository: **[LateX_Code/main.pdf](https://github.com/Alyelb/Sensorgest-tzte-Sturzerkennung-mittels-ML-Modellen/blob/main/LateX_Code/main.pdf)**
+- Falls die GitHub-Vorschau nicht lädt: Datei öffnen und **Download** nutzen oder direkt über den Raw-Link herunterladen:  
+  **https://raw.githubusercontent.com/Alyelb/Sensorgest-tzte-Sturzerkennung-mittels-ML-Modellen/main/LateX_Code/main.pdf**
 
-## Projektüberblick
-Dieses Repository enthält mein Studienprojekt an der TH Mittelhessen zur sensorgestützten Sturzerkennung mit Machine-Learning-Methoden.  
-Die Arbeit untersucht, wie gut unterschiedliche Inertialsensor-Konfigurationen (3-, 6- und 9-Achsen) für die Sturzerkennung geeignet sind und welche Kombination aus Genauigkeit, Robustheit und Energi[...] 
+> Quelle der Inhalte: `LateX_Code/main.tex` (Kapitelstruktur und Begründungen).
 
-Die inhaltliche Grundlage dieser Beschreibung orientiert sich an `LateX_Code/main.tex`.
+## Projektüberblick und Zielsetzung
+Dieses Repository dokumentiert ein Studienprojekt zur automatischen Sturzerkennung mit Inertialsensoren für ein späteres Insole-/Wearable-Szenario.  
+Der Fokus liegt auf einer belastbaren, literatur- und datenblattgestützten Entscheidungsbasis für die Modellentwicklung.
 
-## Ziel des Projekts
-Das übergeordnete Ziel ist die Entwicklung eines alltagstauglichen, zuverlässigen und ressourcenschonenden Systems zur automatischen Erkennung von Stürzen.  
-Dafür wird das Projekt in vier aufeinander aufbauende Aufgaben gegliedert.
+Übergeordnetes Ziel:
+- zuverlässige Sturzerkennung,
+- möglichst geringe Fehlalarme,
+- sinnvolle Balance aus Erkennungsqualität, Energiebedarf und Implementierungsaufwand.
 
-## Projektaufgaben und Schritte
-1. **Aufgabe 1 – Vergleich der Sensorachsen (3/6/9 Achsen)**  
-   Theoretischer und literaturgestützter Vergleich der Sensorkonfigurationen hinsichtlich Eignung für Sturzerkennung.
+## Aufgaben (1–4) mit Vorgehen und Ergebnis
 
-2. **Aufgabe 2 – Bewertung relevanter Sensoreigenschaften**  
-   Analyse wichtiger Hardware-Eigenschaften (z. B. Abtastrate, Messbereich, Rauschverhalten, Energiebedarf) und deren Einfluss auf die Erkennungsqualität.
+### Aufgabe 1 – Vergleich von 3-, 6- und 9-Achsen-Systemen
+**Problem/Ziel**  
+Klären, ob mehr Achsen die Sturzerkennung tatsächlich verbessern und ob der Zusatzaufwand gerechtfertigt ist.
 
-3. **Aufgabe 3 – Auswahl geeigneter Open-Source-Datensätze**  
-   Systematische Bewertung verfügbarer Fall-Datensätze (u. a. nach Sensorposition, Achsen, Klassenabdeckung und Datenqualität) als Grundlage für das spätere Modelltraining.
+**Methode**  
+Literaturvergleich + Datenblattabgleich (u. a. Sensitivität/Spezifität, Energie- und Integrationsaufwand).
 
-4. **Aufgabe 4 – Entwicklung und Training des ML-Modells**  
-   Aufbau, Training und prototypische Integration eines geeigneten Modells für die praktische Sturzerkennung.
+**Konkrete Schritte**
+1. Physikalische Bedeutung der Achsengruppen (Beschleunigung, Gyroskop, Magnetometer) strukturiert aufgestellt.
+2. 3-Achsen-Ansatz (SVM/Schwellwerte) mit realen Schwächen bei ADL-Abgrenzung bewertet.
+3. 6-Achsen-Nutzen über quantitative Studienergebnisse begründet (v. a. weniger False Positives).
+4. 9-Achsen-Zusatznutzen gegen Driftkorrektur vs. Indoor-Magnetstörungen und Mehrkosten abgewogen.
+5. Repräsentative Komponenten (MPU-6050, LSM6DSOX, BHI360) über Datenblätter verglichen.
 
-## Aktueller Stand
-Ich befinde mich aktuell **am Anfang von Aufgabe 4**.  
-Die Aufgaben 1 bis 3 wurden inhaltlich vorbereitet und dokumentiert; als nächster Schritt startet die eigentliche Modellentwicklung mit den ausgewählten Datensätzen.
+**Ergebnis/Status**  
+Abgeschlossen. Für den Use Case ist **6-Achsen** der beste Kompromiss; 9-Achsen bringt für kurze Sturzereignisse meist keinen proportionalen Mehrwert.
 
-## Repository-Inhalt
-- `LateX_Code/main.tex` – Hauptdokument der wissenschaftlichen Ausarbeitung
-- `LateX_Code/references.bib` – Literaturverzeichnis
-- `README.md` – Projektübersicht
+---
 
-## PDF (lokal erstellen & live aktualisieren)
-Die README verlinkt jetzt auf `LateX_Code/main.pdf`. Damit der Link funktioniert, muss `LateX_Code/main.pdf` im Repository vorhanden sein.
+### Aufgabe 2 – Einfluss der Sensoreigenschaften auf Erkennungsqualität
+**Problem/Ziel**  
+Bestimmen, welche Sensorparameter die spätere ML-Leistung praktisch beeinflussen.
 
-Wenn du die PDF lokal erstellen und bei Änderungen automatisch neu bauen möchtest ("live"), empfehle ich `latexmk` mit der `-pvc` Option. Schritte:
+**Methode**  
+Kompakte, literaturbasierte Bewertung von fünf Kernparametern:
+- Messbereich,
+- Abtastrate,
+- Bit-Auflösung,
+- Rauschdichte,
+- Drift.
 
-1. Installiere eine TeX-Distribution (falls noch nicht vorhanden):
-   - Ubuntu/Debian: `sudo apt install texlive-full latexmk`
-   - macOS: installiere MacTeX oder `brew install basictex` + `tlmgr`/`tinytex`
+**Konkrete Schritte**
+1. Messbereich gegen Clipping-Risiko analysiert (Impact-Peaks als kritisches Merkmal).
+2. Abtastraten-Einfluss auf Genauigkeit vs. Daten-/Energiebedarf verglichen.
+3. Quantisierung und effektive Auflösung (unter Rauscheinfluss) eingeordnet.
+4. Rauschdichte über RMS-Rauschen auf Merkmalsextraktion bezogen.
+5. Gyroskop-Drift auf die kurze Sturzdauer skaliert und Relevanz reduziert bewertet.
+6. Empfohlenen Arbeitsbereich für das Zielsystem zusammengefasst.
 
-2. Wechsle ins Repo-Verzeichnis und starte den Live-Builder:
+**Ergebnis/Status**  
+Abgeschlossen. Empfohlen ist eine 6-Achsen-IMU mit praxisnahen Parametern wie z. B. **±16 g**, **20–50 Hz**, mindestens **12 Bit** und niedriger Rauschdichte.
 
-   ```bash
-   cd path/to/repo
-   latexmk -pdf -pvc LateX_Code/main.tex
-   ```
+---
 
-   `latexmk -pdf -pvc` beobachtet `main.tex` (und inkludierte Dateien) und baut automatisch `LateX_Code/main.pdf` bei Änderungen.
+### Aufgabe 3 – Auswahl und Bewertung von Open-Source-Datensätzen
+**Problem/Ziel**  
+Geeignete Datensätze für Aufgabe 4 auswählen, passend zur geplanten Sensorik und zum Zielanwendungsfall.
 
-Alternativ kannst du lokal einmalig mit `pdflatex` oder `xelatex` bauen, z. B. `latexmk -pdf LateX_Code/main.tex`.
+**Methode**  
+Systematische Bewertung von sieben Datensätzen nach:
+- Sensorposition,
+- Achsenkonfiguration/Abtastrate,
+- Klassenabdeckung (Stürze/ADL),
+- Probandendiversität,
+- Verfügbarkeit/Zugänglichkeit.
 
-Wenn du möchtest, kann ich zusätzlich eine GitHub Actions-Workflow-Datei erstellen, die bei jedem Push die PDF automatisch baut und committet. Sag mir kurz, ob du das willst.
+**Konkrete Schritte**
+1. Datensatz-Übersichtstabelle erstellt (SisFall, MobiFall/MobiAct, UMAFall, KFall, FallAllD, UniMiB SHAR, WEDA-FALL).
+2. Einzelbewertung je Datensatz mit Stärken/Limitierungen durchgeführt.
+3. Zugangswege/Lizenzen dokumentiert (Direktdownload vs. Anfrage/Vertrag).
+4. Primär- und Sekundärdatensatz begründet ausgewählt.
+
+**Ergebnis/Status**  
+Abgeschlossen. **SisFall** als Primärdatensatz; **KFall** als ergänzender Datensatz (u. a. wegen Pre-Impact-Annotation).
+
+---
+
+### Aufgabe 4 – Entwicklung und Training des ML-Modells
+**Problem/Ziel**  
+Ein robustes ML-Modell für Sturzerkennung mit den ausgewählten Datensätzen entwickeln und prototypisch für das Zielsystem nutzbar machen.
+
+**Methode**  
+Datengestützte Pipeline auf Basis der Ergebnisse aus Aufgaben 1–3.
+
+**Konkrete Schritte (abgeleiteter Umsetzungspfad)**
+1. Datensätze beschaffen/vereinheitlichen und Zielkanäle (6-Achsen) konsistent aufbereiten.
+2. Abtastrate und Sensorbereiche gemäß den begründeten Empfehlungen harmonisieren.
+3. Trainings-/Validierungsstrategie mit klarer Probandentrennung definieren.
+4. Merkmals- und/oder Sequenzmodell(e) trainieren und gegen ADL-Fehlalarme optimieren.
+5. Ergebnisse mit Literatur-Benchmarks vergleichen und Robustheit dokumentieren.
+
+**Ergebnis/Status**  
+**In Arbeit (Startphase)**. Grundlagen und Datensatzentscheidung sind abgeschlossen; Modellpipeline ist der nächste aktive Arbeitsschritt.
+
+## Work Tree (Arbeitsbaum)
+```text
+Studienprojekt Sturzerkennung
+├── A1: Sensorachsen-Vergleich (3/6/9)
+│   ├── Literaturauswertung
+│   ├── Datenblattvergleich (MPU-6050, LSM6DSOX, BHI360)
+│   └── Entscheidung: 6-Achsen bevorzugt
+├── A2: Sensoreigenschaften
+│   ├── Messbereich / Clipping
+│   ├── Abtastrate
+│   ├── Bit-Auflösung
+│   ├── Rauschdichte
+│   └── Drift-Bewertung + empfohlener Arbeitspunkt
+├── A3: Datensatzanalyse
+│   ├── 7 Open-Source-Datensätze bewertet
+│   ├── Verfügbarkeit & Lizenz geprüft
+│   └── Entscheidung: SisFall (primär) + KFall (sekundär)
+└── A4: ML-Entwicklung (Fortsetzung)
+    ├── Datenaufbereitung / Harmonisierung
+    ├── Feature- & Modelltraining
+    ├── Evaluation / Vergleich mit Benchmarks
+    └── Prototypische Integration ins Zielsystem
+```
+
+## How to continue (Roadmap ab Aufgabe 4)
+1. **Datengrundlage finalisieren**: SisFall und KFall reproduzierbar laden, Metadaten dokumentieren, Versionierung festhalten.
+2. **Preprocessing standardisieren**: Kanalmapping, Resampling (20–50 Hz Zielbereich), Fensterung, Normalisierung.
+3. **Baseline zuerst**: Einfache Baseline (z. B. klassisches Modell) als Referenz vor komplexeren Deep-Learning-Varianten.
+4. **Robuste Evaluation**: Probandenübergreifende Splits, Sensitivität/Spezifität/F1 getrennt ausweisen, Fehlalarmanalyse je ADL.
+5. **Ablationen durchführen**: Einfluss von Samplingrate, Sensor-Kombination und Featuregruppen isoliert testen.
+6. **Deployment-Vorbereitung**: Rechenzeit, Speicherbedarf und Energieprofil für Insole-Hardware abschätzen.
+7. **Dokumentation fortführen**: Ergebnisse direkt in `LateX_Code/main.tex` konsistent nachpflegen.
+
+## Repository-Struktur
+- `LateX_Code/main.tex` – Hauptdokument (Source of Truth)
+- `LateX_Code/references.bib` – Literaturdatenbank
+- `LateX_Code/main.pdf` – erzeugte PDF-Ausgabe
+- `.github/workflows/build-latex-pdf.yml` – automatischer PDF-Build und Update
+
+## Automatischer PDF-Build (GitHub Actions)
+Bei Push auf `main` und manuellem Start (`workflow_dispatch`) wird `LateX_Code/main.tex` gebaut.  
+Wenn sich `LateX_Code/main.pdf` ändert, wird die Datei automatisch mit Commit-Message
+`chore: auto-build LaTeX PDF` zurück nach `main` geschrieben und zusätzlich als Workflow-Artefakt hochgeladen.
