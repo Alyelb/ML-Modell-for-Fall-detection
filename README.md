@@ -1,6 +1,6 @@
 # Sensor-Based Fall Detection with Machine Learning
 
-> **[📄 Read the Full Report (PDF)](../../releases/latest/download/main.pdf)**
+> **[📄 Read the Full Report (PDF)](report/main.pdf)**
 
 **Studienprojekt 2** — TH Mittelhessen, Fachbereich 12 (Elektro- und Informationstechnik)
 
