@@ -1,0 +1,29 @@
+name: Build LaTeX PDF
+
+on:
+  push:
+    paths:
+      - 'report/**'
+      - '.github/workflows/build-pdf.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile LaTeX
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: report/main.tex
+          latexmk_use_xelatex: false
+          args: -pdf -interaction=nonstopmode -output-directory=report
+
+      - name: Upload PDF as release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: report/main.pdf
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

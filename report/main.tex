@@ -1,0 +1,1340 @@
+%==================================================================
+%   Studienprojekt 2 — Sensor-Based Fall Detection with ML
+%   Aly Elbermawy · TH Mittelhessen · 2026
+%
+%   Compile with:
+%     pdflatex main
+%     bibtex   main
+%     pdflatex main
+%     pdflatex main
+%==================================================================
+
+\documentclass[11pt,a4paper,oneside]{report}
+
+% -------------- Encoding & language --------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+% Hinweis: Kapitel 3 ist auf Deutsch verfasst. Fuer korrekte deutsche
+% Silbentrennung auf deinem System (TeX Live mit hyphen-german) bitte
+% ersetzen durch:
+%     \usepackage[ngerman,english]{babel}
+% und um jedes deutsche Kapitel \selectlanguage{ngerman} ... \selectlanguage{english} setzen.
+% \usepackage{lmodern}  % not available in this environment; default Computer Modern is used
+
+% -------------- Page geometry & layout -----------
+\usepackage[a4paper,left=3cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{parskip}
+
+% -------------- Math -----------------------------
+\usepackage{amsmath,amssymb,amsthm}
+
+% -------------- Graphics & floats ----------------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+
+% -------------- Tables ---------------------------
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+% -------------- Citations & bibliography ---------
+\usepackage[numbers,square,sort&compress]{natbib}
+\bibliographystyle{ieeetr}
+
+% -------------- Hyperlinks (loaded last) ---------
+\usepackage[hidelinks,pdfusetitle]{hyperref}
+
+% -------------- Nomenclature / acronyms ----------
+\usepackage[printonlyused]{acronym}
+
+% -------------- Header/footer --------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\nouppercase{\leftmark}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% -------------- Chapter title style (subtle) -----
+\usepackage{titlesec}
+\titleformat{\chapter}[hang]
+  {\normalfont\huge\bfseries}{\thechapter}{1em}{}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+%==================================================================
+%   Document metadata
+%==================================================================
+\title{3-, 6- and 9-Axis Sensor Systems for Fall Detection: A Comparative Study}
+\author{Aly Elbermawy}
+\date{July 2026}
+
+%==================================================================
+\begin{document}
+
+%------------------------------------------------------------------
+%   TITLE PAGE
+%------------------------------------------------------------------
+\begin{titlepage}
+\begin{center}
+
+% --- THM logo placeholder (replace with real logo image) ---
+% \includegraphics[width=6cm]{thm_logo.pdf}
+\vspace*{1cm}
+{\LARGE\bfseries TH Mittelhessen\par}
+\vspace{0.2cm}
+{\small Technische Hochschule Mittelhessen - University of Applied Sciences\par}
+
+\vspace{2.5cm}
+{\Large\bfseries Studienprojekt 2\par}
+\vspace{0.4cm}
+{\large Wissenschaftliches Arbeiten\par}
+
+\vspace{2cm}
+\rule{0.7\textwidth}{0.4pt}\\[0.4cm]
+{\Large\bfseries Subject:\par}
+\vspace{0.3cm}
+{\Large\bfseries Sensor-Based Fall Detection with Machine\\Learning}\\[0.4cm]
+\rule{0.7\textwidth}{0.4pt}
+
+\vspace{2cm}
+\begin{tabbing}
+\hspace{4.5cm}\= \kill
+\textbf{Author:}         \> Aly Elbermawy \\
+\textbf{Matriculation number:} \> 5335848 \\[0.4cm]
+\textbf{Supervisor:}     \> Dr.\ Kovalev \\
+\textbf{Industry Partner:} \> TrackTech GmbH \\[0.4cm]
+\textbf{University:}     \> Technische Hochschule Mittelhessen, Friedberg \\[0.4cm]
+\textbf{Submitted on:}   \> July~24, 2026
+\end{tabbing}
+
+\end{center}
+\end{titlepage}
+
+%------------------------------------------------------------------
+%   CONFIDENTIALITY / SPERRVERMERK
+%------------------------------------------------------------------
+\thispagestyle{empty}
+\vspace*{2cm}
+\section*{Confidentiality Clause}
+Transmittal, reproduction, dissemination and/or editing of this document as well as
+utilization of its contents and communication thereof to others without express
+authorization are prohibited. Offenders will be held liable for payment of damages.
+All rights created by patent grant or registration of a utility model or design
+patent are reserved.
+
+\vspace{1.5cm}
+\section*{Sperrvermerk}
+Die vorliegende Arbeit beinhaltet interne vertrauliche Informationen der TrackTech
+GmbH bzw. Clever-Sole. Die Weitergabe des Inhaltes der Arbeit und eventuell
+beiliegender Zeichnungen und Daten im Gesamten oder in Teilen ist grundsätzlich
+untersagt. Es dürfen keinerlei Kopien oder Abschriften -- auch in digitaler Form
+-- gefertigt werden. Ausnahmen bedürfen der schriftlichen Genehmigung der TrackTech
+GmbH.
+\newpage
+
+%------------------------------------------------------------------
+%   ABSTRACT
+%------------------------------------------------------------------
+\thispagestyle{empty}
+\section*{Abstract}
+Falls are a leading cause of severe injury and reduced quality of life for elderly
+and care-dependent individuals. A reliable, energy-efficient and everyday-wearable
+fall-detection system can raise alarms in real time and thereby improve care safety.
+The novelty of the present project lies in the target form factor: a
+shoe-insole-integrated inertial sensor, rather than the wrist, hip or waist positions
+that dominate most public datasets.
+
+The present study, submitted in partial fulfilment of the module \emph{Studienprojekt~2}
+at TH Mittelhessen, addresses the first of four assigned tasks. Its objective is a
+literature- and datasheet-based comparison of 3-, 6- and 9-axis sensor configurations
+in the context of fall detection. The research question is whether a higher number
+of sensed axes actually improves detection performance and, if so, up to which point
+the improvement justifies the additional cost in energy, computation and complexity.
+
+The analysis draws on peer-reviewed evaluations of accelerometer-only, IMU-based and
+MARG-based fall detection algorithms, complemented by manufacturer datasheets of
+three representative components (MPU-6050, LSM6DSOX, BHI360). It concludes that the
+transition from three to six axes yields a well-documented, substantial improvement
+-- primarily in specificity, i.e.\ fewer false alarms -- whereas the further step
+to nine axes adds absolute orientation whose benefit is marginal for the
+short-duration fall event itself, while introducing new susceptibility to indoor
+magnetic disturbances. A 6-axis configuration is therefore recommended as the sweet
+spot for the insole use case, which is also compatible with the leading public
+6-axis fall datasets (SisFall, KFall) used in subsequent tasks.
+\newpage
+
+%------------------------------------------------------------------
+%   CONTENTS + LISTS
+%------------------------------------------------------------------
+\pagenumbering{roman}
+\setcounter{page}{3}
+
+\tableofcontents
+\newpage
+
+\listoffigures
+\listoftables
+\newpage
+
+%------------------------------------------------------------------
+%   ABBREVIATIONS
+%------------------------------------------------------------------
+\chapter*{Abbreviations}
+\addcontentsline{toc}{chapter}{Abbreviations}
+
+\begin{acronym}[LSM6DSOX]
+  \acro{ADL}{Activity of Daily Living}
+  \acro{ADC}{Analog-to-Digital Converter}
+  \acro{AHRS}{Attitude and Heading Reference System}
+  \acro{DoF}{Degrees of Freedom}
+  \acro{IMU}{Inertial Measurement Unit}
+  \acro{MARG}{Magnetic, Angular Rate and Gravity}
+  \acro{MEMS}{Micro-Electro-Mechanical Systems}
+  \acro{ML}{Machine Learning}
+  \acro{MLC}{Machine Learning Core}
+  \acro{ODR}{Output Data Rate}
+  \acro{SVM}{Signal Vector Magnitude}
+\end{acronym}
+\newpage
+
+%==================================================================
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+%------------------------------------------------------------------
+\chapter{Einleitung}
+\label{ch:intro}
+
+\section{Überblick}
+Stürze gehören zu den häufigsten Ursachen für schwere Verletzungen und
+langfristige gesundheitliche Komplikationen bei älteren und pflegebedürftigen
+Menschen, insbesondere bei Personen mit Demenz. Ein zuverlässiges,
+energieeffizientes und alltagstaugliches automatisches Sturzerkennungssystem
+auf Basis tragbarer Inertialsensoren kann dazu beitragen, Alarme schnell
+auszulösen und dadurch die Sicherheit in der Pflege zu erhöhen.
+
+Die Qualität der automatischen Sturzerkennung hängt nicht nur vom verwendeten
+Machine-Learning-Modell zur Klassifikation ab, sondern auch von der zugrunde
+liegenden Sensorhardware und den verfügbaren Trainingsdaten. Das vorliegende
+\emph{Studienprojekt~2} ist daher in vier Aufgaben gegliedert: eine kurze
+theoretische Bewertung der Sensorkonfiguration und ihrer physikalischen
+Eigenschaften (Aufgaben~1 und~2), eine Bewertung frei verfügbarer
+Open-Source-Sturzdatensätze (Aufgabe~3) sowie - als Hauptschwerpunkt - die
+Entwicklung, das Training und die prototypische Integration eines spezifischen
+Machine-Learning-Modells (Aufgabe~4).
+
+\section{Umfang dieses Kapitels}
+Dieses Dokument behandelt die Aufgaben~1 bis~3 des Projekts. Aufgabe~1
+vergleicht die drei grundlegenden Sensorachsenkonfigurationen, Aufgabe~2
+bewertet den Einfluss niedrigstufiger Sensoreigenschaften auf die
+Erkennungsqualität und Aufgabe~3 sichtet die in Frage kommenden
+Open-Source-Datensätze und begründet die Auswahl für die
+Modellentwicklung in Aufgabe~4.
+
+\section{Struktur}
+Kapitel~\ref{ch:comparison} erläutert die physikalischen Grundlagen jeder
+Sensorachsengruppe und leitet eine begründete Achsenempfehlung ab.
+Kapitel~\ref{ch:properties} untersucht den Einfluss von fünf
+Sensoreigenschaften auf die Erkennungsqualität.
+Kapitel~\ref{ch:datasets} bewertet sieben Open-Source-Datensätze anhand
+der in der Aufgabenstellung genannten Kriterien (Sensorposition,
+Achsenkonfiguration und Abtastrate, Klassenabdeckung und Probanden\-diversität,
+Verfügbarkeit) und begründet die Auswahl der Primär- und
+Sekundärdatensätze für die Modellentwicklung.
+
+%------------------------------------------------------------------
+%------------------------------------------------------------------
+\chapter{3-, 6- und 9-Achsen-Sensorsysteme zur Sturzerkennung}
+\label{ch:comparison}
+
+\section{Forschungsfrage und Vorgehensweise}
+\label{sec:question}
+Die zentrale Fragestellung dieses Kapitels lautet, ob eine höhere Anzahl
+erfasster Achsen die Genauigkeit der Sturzerkennung statistisch signifikant
+verbessert und bis zu welchem Punkt diese Verbesserung den zusätzlichen Aufwand
+hinsichtlich Energieverbrauch, Rechenleistung und Komplexität rechtfertigt. Die
+Aufgabenstellung verlangt ausdrücklich, dass die daraus abgeleitete Bewertung
+durch Literatur oder Datenblätter gestützt wird und nicht lediglich auf
+Behauptungen beruht. Die vorliegende Analyse kombiniert daher zwei voneinander
+unabhängige Beweislinien: (i) begutachtete wissenschaftliche Studien, die
+Sensitivität und Spezifität der jeweiligen Achsenkonfigurationen berichten,
+sowie (ii) Herstellerdatenblätter repräsentativer Komponenten aus dem 6- und
+9-Achsen-Bereich.
+
+\section{Physikalische Bedeutung der Achsengruppen}
+\label{sec:physics}
+Die drei Achsenkonfigurationen unterscheiden sich hinsichtlich der
+physikalischen Größen, die sie messen
+(Tabelle~\ref{tab:axes-overview}):
+
+\begin{table}[H]
+\centering
+\caption{Von 3-, 6- und 9-Achsen-Sensorkonfigurationen gemessene physikalische Größen.}
+\label{tab:axes-overview}
+
+\renewcommand{\arraystretch}{1.3}
+
+\begin{tabularx}{\textwidth}{
+>{\raggedright\arraybackslash}p{0.18\textwidth}
+>{\raggedright\arraybackslash}p{0.27\textwidth}
+>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Konfiguration} & \textbf{Sensoren} & \textbf{Gemessene Größe} \\
+\midrule
+
+3-Achsen
+&
+Dreiachsiger Beschleunigungssensor
+&
+Lineare Beschleunigung einschließlich der Erdbeschleunigung entlang der $x$-, $y$- und $z$-Achse, üblicherweise in g angegeben.
+\\
+
+6-Achsen (\ac{IMU})
+&
+Dreiachsiger Beschleunigungssensor + dreiachsiges Gyroskop
+&
+Lineare Beschleunigung zusammen mit der Winkelgeschwindigkeit (Roll-, Nick- und Gierrate), üblicherweise in $^\circ$/s angegeben.
+\\
+
+9-Achsen (\ac{MARG})
+&
+Dreiachsiger Beschleunigungssensor + dreiachsiges Gyroskop + dreiachsiges Magnetometer
+&
+Lineare Beschleunigung, Winkelgeschwindigkeit und der Magnetfeldvektor der Erde, wodurch mittels Sensorfusionsalgorithmen eine absolute Richtungsbestimmung und vollständige Orientierung ermöglicht werden.
+\\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{3-Achsen-Systeme: Nur Beschleunigungssensor}
+\label{sec:3axis}
+
+\subsection{Erkennungsprinzip}
+Der dominierende Ansatz bei 3-Achsen-Systemen berechnet den Betrag der
+Beschleunigung (\ac{SVM}) und wendet Schwellwerte auf die charakteristische
+Sturzsignatur an: eine Freifallphase, in der der Betrag gegen $0$\,g fällt,
+gefolgt von einem ausgeprägten Aufprallmaximum. Ein häufig zitierter
+Schwellwertalgorithmus von Bourke verwendet einen unteren Freifall-Schwellwert
+von $0.65$\,g und einen oberen Aufprall-Schwellwert von $2.8$\,g, optional
+ergänzt durch eine Überwachung der Körperhaltung nach dem Aufprall
+(``Long-Lie'') \cite{bagala2012}.
+
+\subsection{Berichtete Leistungsfähigkeit}
+Schwellwertbasierte Algorithmen, die ausschließlich Beschleunigungssensoren
+verwenden, erreichen unter Laborbedingungen typischerweise Sensitivitäts- und
+Spezifitätswerte im Bereich von 80--95\,\%
+\cite{dinh2021}. Bei sorgfältig simulierten Laborstürzen berichten einzelne
+Algorithmen sogar nahezu perfekte Ergebnisse. Wurde derselbe
+leistungsstärkste Algorithmus jedoch anhand einer Datenbank mit
+\emph{realen} Stürzen älterer Menschen bewertet, sank die Sensitivität auf
+$83\,\%$ (Spezifität $97\,\%$) \cite{bagala2012}. Diese Diskrepanz stellt
+einen gut dokumentierten Realitätscheck für sämtliche Laborergebnisse in
+diesem Forschungsgebiet dar.
+
+\subsection{Zentrale Einschränkung: Falsch-positive Erkennungen}
+Die ausschließliche Verwendung des Beschleunigungsbetrags erlaubt keine
+zuverlässige Unterscheidung zwischen tatsächlichen Stürzen und sturzähnlichen
+Aktivitäten des täglichen Lebens (\acp{ADL}), wie beispielsweise schnellem
+Hinsetzen, Hinlegen, Laufen oder Springen, da all diese vergleichbar hohe
+Beschleunigungsspitzen erzeugen können \cite{huynh2015}. Eine Absenkung des
+Erkennungsschwellwertes, um mehr Stürze zu erfassen, erhöht unmittelbar die
+Rate falsch-positiver Alarme, ein grundlegender Zielkonflikt zwischen
+Sensitivität und Spezifität des Einzelmodalitätsansatzes
+\cite{dinh2021}. Im Pflegekontext untergraben häufige Fehlalarme die
+Akzeptanz der Nutzer und führen nachweislich zu Alarmmüdigkeit.
+
+\section{6-Achsen-Systeme: Beschleunigungssensor und Gyroskop}
+\label{sec:6axis}
+
+\subsection{Welchen Beitrag das Gyroskop leistet}
+Stürze gehen mit einer charakteristischen schnellen Änderung der
+Körperorientierung (Rotation in Richtung der Horizontalen) einher, die bei
+\acp{ADL} wie dem Hinsetzen nicht in derselben Kombination aus
+Rotationsgeschwindigkeit und Beschleunigung auftritt. Die vom Gyroskop
+gemessene Winkelgeschwindigkeit liefert daher ein unabhängiges
+Unterscheidungsmerkmal genau dort, wo das Signal des Beschleunigungssensors
+mehrdeutig ist.
+
+\subsection{Berichtete Leistungssteigerungen}
+Zwei unabhängige quantitative Ergebnisse kommen zu derselben Schlussfolgerung.
+In einem auf der Brust getragenen System mit 702 Aufzeichnungen von
+36 Probanden erhöhte die Ergänzung eines beschleunigungsbasierten Algorithmus
+durch Gyroskop-Schwellwerte die \emph{Spezifität} von $82.72\,\%$ auf
+$96.2\,\%$, während gleichzeitig eine Sensitivität von $96.3\,\%$ erhalten
+blieb (Schwellwerte mittels ROC-Analyse optimiert)
+\cite{huynh2015}. In einer Smartphone-basierten Studie mit frei variierenden
+Gerätepositionen übertraf die Kombination aus Beschleunigungssensor und
+Gyroskop die reine Beschleunigungssensor-Konfiguration um mehr als
+$15$ Prozentpunkte hinsichtlich der Genauigkeit \cite{hakim2019}. Beide
+Ergebnisse identifizieren die Reduktion falsch-positiver Erkennungen als den
+wesentlichen Beitrag des Gyroskops.
+
+\subsection{Grenzen des Nutzens des Gyroskops}
+Der Zugewinn ist jedoch nicht uneingeschränkt. Studien, die die Mehrdeutigkeit
+des Beschleunigungssensors bereits auf andere Weise kompensieren – etwa durch
+zwei Sensorpositionen oder die Fusion mit einem Barometer-, berichten von
+geringeren zusätzlichen Vorteilen durch das Gyroskop
+\cite{arxiv2308_lstm,mdpi2025_realworld}. Der Vorteil einer
+6-Achsen-Konfiguration ist daher insbesondere im Szenario mit nur einem Sensor
+an einer einzigen Position am größten, genau der Einlagenkonfiguration, die
+dieses Projekt verfolgt.
+
+\section{9-Achsen-Systeme: Zusätzliches Magnetometer}
+\label{sec:9axis}
+
+\subsection{Funktion des Magnetometers}
+Die auf dem Gyroskop basierende Orientierung wird durch numerische Integration
+der Winkel-geschwindigkeit bestimmt, wodurch sich Messfehler im Laufe der Zeit
+aufsummieren. Roetenberg et al.\ berichten, dass eine ausschließlich auf dem
+Gyroskop basierende Integration innerhalb von $45$~s um etwa
+$10^{\circ}$ abdriften kann \cite{roetenberg2005}. Das Magnetometer misst das
+Magnetfeld der Erde und stellt dadurch eine \emph{absolute}
+Richtungsreferenz bereit. In Kombination mit Beschleunigungssensor und
+Gyroskop in einem Kalman- oder Madgwick-Filter korrigiert es diese Drift und
+liefert eine stabile absolute Orientierung (Gier, Nick und Roll).
+
+\subsection{Warum dies für die Sturzerkennung weniger relevant ist}
+Ein Sturz ist ein kurzzeitiges Ereignis, die kritische Phase vom Verlust des
+Gleichgewichts bis zum Aufprall dauert typischerweise nur ein bis wenige
+Sekunden. Innerhalb dieses Zeitraums ist die Gyroskopdrift gering. Die
+Driftkorrektur, welche den Hauptbeitrag des Magnetometers darstellt, kommt
+daher in erster Linie der \emph{langfristigen} Orientierungsbestimmung zugute
+und nicht der Erkennung eines kurzen, hochdynamischen Ereignisses. Die mit
+sechs Achsen messbare relative Orientierungsänderung reicht aus, um die
+Kinematik eines Sturzes zu charakterisieren.
+
+\subsection{Nachteile: Magnetische Störungen in Innenräumen}
+Messwerte von Magnetometern werden in Innenräumen systematisch verfälscht:
+Ferromagnetische Materialien in Gebäudestrukturen, Haushaltsgeräten und
+Möbeln verändern das lokale Magnetfeld, verursachen Richtungsfehler, die
+häufig $5^{\circ}$ überschreiten, und erschweren dadurch mobile Anwendungen
+\cite{pmc11991382,yang2024neurit,pubmed25347584}. Da ältere Menschen den
+größten Teil ihrer Zeit in Innenräumen verbringen, erfordert ein robuster
+Betrieb Kalibrierungs- und Störkompensationsalgorithmen, also zusätzlichen
+Rechenaufwand \cite{pmc11991382,pubmed25347584} zusätzlich zum höheren
+Energieverbrauch und Integrationsaufwand einer dritten Sensormodalität sowie
+einer vollständigen 9-\ac{DoF}-Sensorfusion.
+
+\section{Beispielkomponenten (Nachweis durch Datenblätter)}
+\label{sec:datasheets}
+Die drei in der Aufgabenstellung genannten repräsentativen Komponenten werden
+in Tabelle~\ref{tab:components} verglichen. Sämtliche Angaben sind typische
+Werte unter den jeweiligen Herstellerbedingungen und müssen für den finalen
+Bericht anhand der Originaldatenblätter erneut überprüft werden.
+
+\begin{table}[H]
+\centering
+\caption{Repräsentative Komponenten auf 6- und 9-Achsen-Ebene.}
+\label{tab:components}
+
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{0.95}
+
+\begin{tabularx}{\textwidth}{
+>{\raggedright\arraybackslash}p{2.1cm}
+>{\centering\arraybackslash}p{1.6cm}
+>{\raggedright\arraybackslash}X
+>{\centering\arraybackslash}p{2cm}
+>{\raggedright\arraybackslash}X
+}
+\toprule
+\textbf{Komponente} &
+\textbf{Konfig.} &
+\textbf{Messbereiche} &
+\textbf{Stromaufnahme} &
+\textbf{Besonderheiten} \\
+\midrule
+
+MPU-6050 \cite{invensense_mpu6050} &
+6-Achsen \ac{IMU} &
+$\pm2/4/8/16$\,g; $\pm250$--$2000^{\circ}$/s &
+$\approx3.9$\,mA &
+Klassische kostengünstige Referenz mit 16-Bit-\acp{ADC}; alle Sensoren aktiv; Referenz für den 6-Achsen-Vergleich. \\
+
+LSM6DSOX \cite{st_lsm6dsox} &
+6-Achsen \ac{IMU} &
+$\pm2$--$16$\,g; $\pm125$--$2000^{\circ}$/s &
+0.55\,mA &
+Hochleistungsmodus; etwa $7\times$ geringere Stromaufnahme als der MPU-6050; integrierter \ac{MLC} und hardwarebasierte Freifallerkennung. \\
+
+BHI360 \cite{bosch_bhi360} &
+6-Achsen \ac{IMU}\\
+(9-\ac{DoF} externes Magnetometer) &
+Geräteabhängig &
+$<600$\,\textmu A &
+Führt die BSX-Fusionsbibliothek direkt auf dem Chip aus und entlastet dadurch den Hauptprozessor von der Sensorfusion. \\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Der Effizienzunterschied zwischen dem MPU-6050 (Generation um 2010) und dem
+LSM6DSOX/BHI360 zeigt außerdem, dass die \emph{Sensorgeneration} den
+Energiebedarf ebenso stark beeinflussen kann wie die Anzahl der Achsen.
+
+\section{Vergleich auf einen Blick}
+\label{sec:glance}
+
+\begin{table}[H]
+\centering
+\caption{Direkter Vergleich der Achsenkonfigurationen für die Sturzerkennung.}
+\label{tab:glance}
+\small
+\begin{tabularx}{\textwidth}{l X X X}
+\toprule
+ & \textbf{3-Achsen} & \textbf{6-Achsen} & \textbf{9-Achsen} \\
+\midrule
+Erfasst
+& Aufprallmaximum, Freifallphase (\ac{SVM})
+& + Rotationsgeschwindigkeit $\rightarrow$ Sturzkinematik
+& + absolute Orientierung / Himmelsrichtung \\
+Stärken
+& Minimaler Aufwand hinsichtlich Kosten, Energie und Komplexität
+& Großer Spezifitätsgewinn ($82.7\rightarrow96.2\,\%$ \cite{huynh2015}; über $15$ Prozentpunkte Genauigkeit \cite{hakim2019})
+& Driftkorrigierte langfristige Orientierung \cite{roetenberg2005} \\
+Schwächen
+& Falsch-positive Erkennungen durch sturzähnliche \acp{ADL}
+\cite{dinh2021,huynh2015}; geringere Sensitivität bei realen Stürzen
+\cite{bagala2012}
+& Höhere Stromaufnahme; Drift spielt nur deshalb kaum eine Rolle, weil Stürze kurz sind
+& Magnetische Störungen in Innenräumen
+\cite{pmc11991382,yang2024neurit,pubmed25347584}; zusätzlicher Energie-, Rechen- und Kalibrierungsaufwand \\
+Nutzen für die Sturzerkennung
+& Basislösung, praktikabel, aber anfällig für Alarmmüdigkeit
+& Hoch, behebt den wesentlichen Schwachpunkt
+& Gering, korrigiert einen Fehler, der sich innerhalb von $1$-$2$\,s kaum aufbaut \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Begründetes Fazit}
+\label{sec:conclusion}
+
+\textbf{Von drei auf sechs Achsen: eindeutig gerechtfertigt.} Der Übergang
+adressiert den dokumentierten Hauptschwachpunkt der ausschließlich auf
+Beschleunigungssensoren basierenden Sturzerkennung - falsch-positive
+Erkennungen durch sturzähnliche \acp{ADL} - mit gemessenen
+Spezifitätssteigerungen von etwa $\approx83\,\%$ auf
+$\approx96\,\%$ \cite{huynh2015} sowie Genauigkeitssteigerungen von mehr als
+15 Prozentpunkten \cite{hakim2019}. Dies geschieht zum Preis einer einzigen
+zusätzlichen \ac{MEMS}-Sensormodalität, deren Stromaufnahme bei modernen
+Bauteilen gering ausfällt ($0.55$\,mA für eine vollständige
+6-Achsen-LSM6DSOX \cite{st_lsm6dsox}).
+
+\textbf{Von sechs auf neun Achsen: für diesen Anwendungsfall nicht
+verhältnismäßig.} Der Hauptbeitrag des Magnetometers, absolute
+Richtungsbestimmung und langfristige Driftkorrektur
+\cite{roetenberg2005} adressiert ein Problem, das bei einem
+$1$-$2$ Sekunden dauernden Sturzereignis praktisch nicht relevant ist,
+führt jedoch gleichzeitig ein neues Problem ein: Richtungsfehler durch
+ferromagnetische Verzerrungen genau in den Innenraumumgebungen, in denen
+ältere Menschen leben
+\cite{pmc11991382,yang2024neurit,pubmed25347584}, sowie zusätzlichen
+Energieverbrauch, Rechenaufwand und Kalibrierungsbedarf. Keine der in dieser
+Literaturübersicht betrachteten Studien zeigt einen Genauigkeitsgewinn durch
+das Magnetometer, der mit dem Beitrag des Gyroskops vergleichbar wäre.
+
+\textbf{Empfehlung:} Eine 6-Achsen-Konfiguration stellt den besten Kompromiss
+für die einlagenbasierte Sturzerkennung dar. Dies wird zusätzlich dadurch
+unterstützt, dass die führenden öffentlich verfügbaren Sturzdatensätze
+(SisFall, KFall) selbst auf 6-Achsen-Aufzeichnungen basieren, wodurch zugleich
+die Kompatibilität der Trainingsdaten für das im Rahmen von Aufgabe~4 zu
+entwickelnde Machine-Learning-Modell sichergestellt wird.
+
+
+%------------------------------------------------------------------
+\chapter{Einfluss der Sensoreigenschaften auf die Erkennungsqualität}
+\label{ch:properties}
+
+In Kapitel~\ref{ch:comparison} wurde die Wahl einer sechsachsigen \ac{IMU} auf
+der Ebene begründet, \emph{welche} Achsen erfasst werden sollen. Das
+vorliegende Kapitel ergänzt diese Argumentation um eine zweite Ebene und
+fragt, \emph{wie präzise} diese Achsen erfasst werden müssen. Betrachtet
+werden fünf niedrigstufige Datenblattgrößen, nämlich Messbereich,
+Abtastrate, Bit-Auflösung, Rauschdichte und Drift, sowie deren jeweiliger
+Einfluss auf die Sturzerkennung. Gemäß der Aufgabenstellung wird der
+Umfang bewusst kompakt gehalten und stützt sich vollständig auf die
+Fachliteratur; eigene Messreihen sind nicht vorgesehen.
+
+\section{Messbereich und Signal-Clipping}
+\label{sec:range}
+Der Messbereich legt fest, wie große Beschleunigungen ein Sensor darstellen
+kann, bevor er in die Sättigung gerät. Ein Sturz besteht aus zwei
+dynamischen Phasen mit stark unterschiedlicher Amplitude. In der freien
+Fallphase sinkt der Betrag der gemessenen Beschleunigung gegen $0$\,g,
+worauf innerhalb weniger Millisekunden der Aufprall folgt, dessen Spitzenwert
+typischerweise ein Mehrfaches der Erdbeschleunigung erreicht. In der
+Literatur häufig zitierte Schwellwertverfahren setzen den oberen
+Impact-Schwellwert an der Hüfte im Bereich von $2{,}0$\,g bis $2{,}8$\,g
+an \cite{bagala2012,us10152869}. An peripheren Körperstellen fallen die
+lokalen Spitzenwerte allerdings deutlich höher aus; Untersuchungen zur
+Tibia-Beschleunigung im Alltag berichten Werte, die im Knöchelbereich
+$16$\,g bis $24$\,g überschreiten können \cite{cornelissen2023clipping}.
+
+Wird der Messbereich zu klein gewählt, kommt es zum sogenannten Clipping.
+Das Analogsignal wird auf den größten darstellbaren Wert abgeschnitten,
+und in der Zeitreihe zeigen sich charakteristische flache Plateaus. Dabei
+wird gerade dasjenige Merkmal verzerrt, das für die Sturzerkennung die
+höchste Trennschärfe aufweist, nämlich der Impact-Peak.
+Vergleichende Messungen belegen einen Genauigkeitsverlust bei der
+Peak-Tibial-Acceleration von etwa $6{,}25\,\%$ bei $\pm 16$\,g und
+$28{,}17\,\%$ bei $\pm 8$\,g gegenüber einer Referenz mit $\pm 70$\,g
+\cite{cornelissen2023clipping}. Ein Messbereich von $\pm 2$\,g, wie er in
+einfachen Konsumbausteinen üblich ist, reicht daher an keiner
+Körperposition aus. $\pm 8$\,g stellt eine praxistaugliche Untergrenze
+dar, während $\pm 16$\,g, wie im SisFall-Datensatz verwendet
+\cite{sucerquia2017sisfall}, insbesondere für periphere Positionen wie
+die geplante Anbringung in der Schuhsohle einen sinnvollen
+Sicherheitspuffer bietet.
+
+\section{Abtastrate}
+\label{sec:samplingrate}
+Die Abtastrate bestimmt, mit welcher zeitlichen Auflösung sich die
+charakteristische Signatur eines Sturzes rekonstruieren lässt.
+Menschliche Bewegungen sind spektral von tiefen Frequenzen dominiert, und
+die kritische Phase eines Sturzes umfasst nur einige hundert Millisekunden.
+Nach dem Nyquist-Kriterium sind daher bereits Abtastraten im Bereich
+einiger zehn Hertz ausreichend, um das relevante Frequenzband abzudecken.
+
+Zwei unabhängig voneinander durchgeführte empirische Arbeiten kommen zu
+einem übereinstimmenden Ergebnis. Villar et al.\ zeigen, dass eine
+Abtastfrequenz von $15$\,Hz bis $20$\,Hz genügt, um mit einem
+Convolutional Neural Network eine Sensitivität und Spezifität von über
+$95\,\%$ zu erreichen, während höhere Frequenzen keinen nennenswerten
+Zusatzgewinn liefern \cite{villar2022sampling}. Eine aktuellere
+Untersuchung auf dem SisFall-Datensatz trainierte fünf Klassifikatoren
+bei $10$, $20$, $50$ und $100$\,Hz. Als bester Kompromiss wurde ein
+CNN-LSTM-Modell bei $20$\,Hz identifiziert, das eine Genauigkeit von
+$98{,}9\,\%$, eine Sensitivität von $96{,}7\,\%$ und eine
+Spezifität von $99{,}6\,\%$ erreicht und dabei gleichzeitig das
+übertragene Datenvolumen deutlich reduziert \cite{diaz2026sampling}.
+Werte unterhalb von $10$\,Hz beginnen, kritische Details der
+Aufprallphase zu verlieren, während Werte oberhalb von etwa $100$\,Hz
+im Wesentlichen nur die Datenrate und den Energiebedarf erhöhen, ohne
+dass die Klassifikationsleistung weiter zunimmt.
+
+Für ein sohlenbasiertes System, das ein batteriebetriebenes Wearable mit
+einem auf begrenzter Hardware ausgeführten ML-Modell kombiniert, stellt
+somit eine Abtastrate zwischen $20$\,Hz und $50$\,Hz einen aus praktischer
+Sicht sinnvollen Arbeitspunkt dar.
+
+\section{Bit-Auflösung}
+\label{sec:resolution}
+Digital ausgegebene \ac{MEMS}-Beschleunigungssensoren quantisieren das
+Analogsignal mit einer festen Anzahl von Bits, in der Regel zwischen zwölf
+und sechzehn. Für die nominelle Auflösung $q$ in Einheiten von g gilt
+$q = \mathrm{FSR}/2^{N}$, wobei $\mathrm{FSR}$ die Vollbereichsspanne und
+$N$ die Bit-Breite bezeichnet. Für einen 16-Bit-\ac{ADC} bei $\pm 16$\,g
+folgt daraus $q \approx 0{,}5$\,mg pro Code. Eine höhere Auflösung
+erlaubt eine feinere Unterscheidung geringfügiger Bewegungen, etwa
+langsames Hinsetzen im Vergleich zum Einleiten eines Sturzes, was der
+merkmalsbasierten Machine-Learning-Stufe in Aufgabe~4 zugutekommt.
+
+Die nominelle Auflösung stellt allerdings eine obere Schranke dar. Die
+effektive Bitanzahl richtet sich nach dem Verhältnis von
+Vollbereichsspanne zum integrierten Sensorrauschen. Veröffentlichte
+Beispiele belegen, dass ein als 16-Bit deklarierter Baustein nach Abzug
+des sensoreigenen Rauschens nur etwa $8{,}5$ rauschfreie Bits liefert
+\cite{nxp2013an4075}. In der Praxis gehören 12- bis 16-Bit-Wandler in
+Wearables zur Sturzerkennung zum Stand der Technik und stellen keinen
+limitierenden Faktor der Klassifikationsgüte dar. Praktisch relevanter
+ist die im folgenden Abschnitt behandelte Rauschdichte.
+
+\section{Rauschdichte}
+\label{sec:noise}
+Die Rauschdichte $n_{d}$, in Datenblättern typischerweise in
+$\mu\mathrm{g}/\sqrt{\mathrm{Hz}}$ für den Beschleunigungssensor
+beziehungsweise in $\mathrm{mdps}/\sqrt{\mathrm{Hz}}$ für das Gyroskop
+angegeben, quantifiziert das dem Nutzsignal überlagerte stochastische
+Grundrauschen. Für das effektive RMS-Rauschen am Klassifikatoreingang
+gilt
+
+\begin{equation}
+\sigma_{\mathrm{RMS}} \;=\; n_{d} \cdot \sqrt{\mathrm{BW}_{\mathrm{NEB}}},
+\label{eq:noise}
+\end{equation}
+wobei $\mathrm{BW}_{\mathrm{NEB}}$ die rauschäquivalente Bandbreite des
+digitalen Filters bezeichnet \cite{arar2022noise}. Für einen typischen
+Konsumbaustein mit $n_{d} \approx 126\,\mu\mathrm{g}/\sqrt{\mathrm{Hz}}$
+und einer Bandbreite von $200$\,Hz ergibt sich hieraus
+$\sigma_{\mathrm{RMS}} \approx 1{,}8$\,mg \cite{arar2022noise}. Eine
+verbreitete Faustregel fordert, dass das kleinste zu detektierende
+Merkmal mindestens eine Größenordnung über $\sigma_{\mathrm{RMS}}$
+liegen sollte \cite{arar2022noise}.
+
+Diese Anforderung ist für die Sturzerkennung leicht zu erfüllen. Die
+dominanten Impact-Peaks liegen im Bereich mehrerer g, sodass das
+Grundrauschen die Aufprallphase in der Praxis nicht beeinflusst. Relevant
+wird die Rauschdichte hingegen in der Merkmalsextraktion einer
+Machine-Learning-Pipeline (vgl.\ Aufgabe~4), in der feine Statistiken wie
+Varianz, Kurtosis oder Ableitungen der Signalmagnitude herangezogen
+werden, um sturzähnliche Alltagsaktivitäten von tatsächlichen
+Stürzen zu trennen. Rauscharme Bausteine wie der LSM6DSOX
+\cite{st_lsm6dsox} bringen an dieser Stelle einen kleinen, aber
+reproduzierbaren Vorteil für den Klassifikator, und dies ohne
+relevanten Zusatzaufwand, da sie zugleich einen geringeren
+Stromverbrauch aufweisen.
+
+\section{Drift, insbesondere beim Gyroskop}
+\label{sec:drift}
+Das Ausgangssignal eines Gyroskops enthält einen langsam
+veränderlichen Bias, dessen spektrale Fluktuationen im tiefen
+Frequenzbereich von einem Anteil mit $1/f$-Charakteristik dominiert werden
+\cite{vagner2013allan}. Die zugehörige Kenngröße, die
+Bias-Instabilität, wird üblicherweise über die Allan-Varianz
+quantifiziert. Für typische kostengünstige \ac{MEMS}-Gyroskope liegt
+sie in der Größenordnung von $3{,}6\,^{\circ}/\mathrm{h}$
+\cite{gakstatter2017biasdrift}. Bausteine der MPU-6050-Klasse zeigen auf
+allen drei Achsen ein vergleichbares Verhalten
+\cite{ilyas2020mpu6050allan}.
+
+Ob dieser Drift praxisrelevant wird, hängt entscheidend vom
+Beobachtungsfenster ab. Bei einer Integration der Winkelgeschwindigkeit zur
+Bestimmung der Orientierung akkumuliert sich der Fehler mit der Zeit.
+Roetenberg et al.\ weisen für eine rein gyroskopische Integration einen
+bias-bedingten Orientierungsfehler von rund $10^{\circ}$ innerhalb von
+$45$~Sekunden nach \cite{roetenberg2005}. Für ein Sturzereignis, dessen
+relevante Zeitspanne im Bereich von ein bis zwei Sekunden liegt, ist der
+Driftbeitrag jedoch verschwindend gering im Vergleich zu den während
+des Sturzes auftretenden Rotationsraten. Dieser Befund deckt sich mit der
+Schlussfolgerung aus Kapitel~\ref{ch:comparison}, wonach die
+driftkompensierende Funktion des Magnetometers für die eigentliche
+Sturzerkennung nur einen marginalen Nutzen liefert.
+
+\section{Zusammenfassung}
+\label{sec:synthesis}
+Die fünf betrachteten Eigenschaften wirken nicht isoliert, sondern greifen
+ineinander (Tabelle~\ref{tab:properties}). Für einen Machine-Learning-
+basierten Sturzdetektor in Sohlenkonfiguration ergibt sich hieraus als
+empfohlener Arbeitspunkt eine sechsachsige \ac{IMU} mit einem
+Beschleunigungs-Messbereich von $\pm 16$\,g, einem Gyroskop-Messbereich
+von $\pm 1000$ bis $\pm 2000\,^{\circ}/\mathrm{s}$, einer Abtastrate
+zwischen $20$\,Hz und $50$\,Hz, mindestens $12$~Bit Auflösung, geringer
+Rauschdichte (unterhalb von etwa
+$100\,\mu\mathrm{g}/\sqrt{\mathrm{Hz}}$) sowie einer nicht weiter
+kompensierten Gyroskop-Drift, da deren Beitrag über die kurze
+Sturzdauer vernachlässigbar bleibt. Diese Anforderungen werden vom in
+Kapitel~\ref{ch:comparison} diskutierten LSM6DSOX abgedeckt und stehen im
+Einklang mit der Aufnahmecharakteristik des SisFall-Datensatzes, der in
+den Aufgaben~3 und~4 verwendet wird.
+
+\begin{table}[H]
+\centering
+\caption{Einfluss der Sensoreigenschaften auf die Sturzerkennungsqualität.}
+\label{tab:properties}
+\small
+\begin{tabularx}{\textwidth}{l X X}
+\toprule
+\textbf{Eigenschaft} & \textbf{Primärer Effekt} & \textbf{Empfohlener Bereich} \\
+\midrule
+Messbereich       & Verhindert Clipping des Impact-Peaks; ein zu kleiner Bereich verzerrt das trennschärfste Merkmal \cite{cornelissen2023clipping,us10152869} & mindestens $\pm 8$\,g, empfohlen $\pm 16$\,g \\
+Abtastrate        & Zeitliche Rekonstruktion der Sturzsignatur; höhere Raten erhöhen den Energiebedarf ohne Genauigkeitsgewinn \cite{villar2022sampling,diaz2026sampling} & $20$\,Hz bis $50$\,Hz \\
+Bit-Auflösung   & Feinauflösung der Merkmalsextraktion; effektive Bitzahl durch das Rauschen begrenzt \cite{nxp2013an4075} & mindestens $12$~Bit \\
+Rauschdichte      & Bestimmt die minimal auflösbare Signalgröße; wirkt sich vor allem auf die Unterscheidung von ADL und Präaufprall aus \cite{arar2022noise} & $\leq 100\,\mu\mathrm{g}/\sqrt{\mathrm{Hz}}$ \\
+Gyroskop-Drift    & Langzeitfehler der Orientierungsbestimmung; auf der Zeitskala eines Sturzes vernachlässigbar \cite{vagner2013allan,roetenberg2005} & für kurze Ereignisse unkritisch \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%------------------------------------------------------------------
+\chapter{Ausblick auf Datensätze für das ML-Modell}
+\label{ch:datasets}
+
+Für die Entwicklung des eigenen Machine-Learning-Modells in Aufgabe~4 stehen
+mehrere frei verfügbare Sturzdatensätze zur Auswahl. Die Aufgabenstellung
+nennt mindestens sieben Kandidaten, die im Folgenden hinsichtlich ihrer
+Eignung für den angestrebten Anwendungsfall bewertet werden: eine
+schuhsohlenintegrierte (\emph{Insole}-)Sturzerkennung bei älteren,
+gegebenenfalls kognitiv eingeschränkten Personen. Die Bewertungskriterien
+orientieren sich an der Aufgabenstellung und umfassen die Sensorposition am
+Körper und deren Übertragbarkeit auf eine Fußsohle, die
+Achsenkonfiguration und Abtastrate im Vergleich zur geplanten Sensorik, die
+Abdeckung verschiedener Sturz- und ADL-Klassen, die Diversität der Probanden
+sowie die Verfügbarkeit und Zugänglichkeit der Rohdaten.
+
+Die Aufgabenstellung enthält bereits eine erste Einschätzung zur Eignung der
+sieben Datensätze. Diese wurde im Rahmen der vorliegenden Bearbeitung anhand
+der Originalpublikationen und der offiziellen Datensatzquellen eigenständig
+geprüft, vertieft und dort präzisiert oder korrigiert, wo die tatsächlichen
+Datenblätter von der Aufgabenstellung abweichen. Die entsprechenden
+Anpassungen sind in den nachfolgenden Abschnitten kenntlich gemacht.
+
+\section{Übersicht der Datensätze}
+\label{sec:dataset_overview}
+
+Tabelle~\ref{tab:datasets} fasst die wesentlichen Eckdaten der sieben
+Datensätze zusammen. Im Anschluss wird jeder Datensatz einzeln hinsichtlich
+seiner Stärken und Einschränkungen für den vorliegenden Anwendungsfall
+eingeordnet.
+
+\begin{table}[H]
+\centering
+\caption{Vergleich der sieben zu bewertenden Sturzdatensätze.}
+\label{tab:datasets}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{
+>{\raggedright\arraybackslash}p{1.6cm}
+>{\raggedright\arraybackslash}p{2.3cm}
+>{\centering\arraybackslash}p{1.2cm}
+>{\centering\arraybackslash}p{1.0cm}
+>{\centering\arraybackslash}p{1.4cm}
+>{\raggedright\arraybackslash}X
+}
+\toprule
+\textbf{Datensatz} &
+\textbf{Sensorik / Position} &
+\textbf{Achsen} &
+\textbf{Hz} &
+\textbf{Probanden} &
+\textbf{Eignung für Insole} \\
+\midrule
+
+SisFall \cite{sucerquia2017sisfall}
+& 2 Beschl.-Sensoren (ADXL345 $\pm 16$\,g, MMA8451Q $\pm 8$\,g) + Gyroskop (ITG3200 $\pm 2000\,^{\circ}/\mathrm{s}$), am Gürtel (Hüfte)
+& 6 (2$\times$3 + 3)
+& 200
+& 38 (23 jung, 15 ältere)
+& Gut geeignet: passende Achsenkonfiguration, hohe Abtastrate, etablierter Benchmark mit vielen Vergleichswerten in der Literatur. \\
+
+MobiFall / MobiAct \cite{mobifall2014,mobiact2016}
+& Smartphone (Samsung Galaxy S3) in der Hosentasche
+& 6--9 (variabel)
+& $\approx$\,20--87
+& 11 / 57
+& Bedingt geeignet: Smartphone-Sensorik (oft nur $\pm 2$\,g) unterscheidet sich von einer Insole; Trageposition und Messbereich weichen ab. \\
+
+UMAFall \cite{umafall2017}
+& 4$\times$ SensorTag (MPU-9250) an Brust, Hüfte, Handgelenk, Knöchel + Smartphone in der Tasche
+& 9
+& 20 (Tags) / 200 (Smartphone)
+& 19 (19--68~J.)
+& Bedingt geeignet: Mehrknoten-Aufbau interessant, aber IMU-Abtastrate nur 20\,Hz; Knöcheldaten vorhanden, jedoch nur 3 Sturztypen. \\
+
+KFall \cite{kfall2021}
+& 9-Achsen-IMU (MTw~Awinda) am unteren Rücken; bereitgestellt werden Beschl., Winkelgeschw.\ und Euler-Winkel
+& 6 + Euler
+& 100
+& 32
+& Gut geeignet: hohe Abtastrate, 15 Sturztypen, zeitliche Annotation des Aufprallzeitpunkts (Pre-Impact), umfangreicher Benchmark. \\
+
+FallAllD \cite{fallalld2020}
+& 3$\times$ IMU (LSM9DS1) an Nacken, Handgelenk und Taille; Beschl.\ $\pm 8$\,g, Gyro $\pm 2000\,^{\circ}/\mathrm{s}$, Mag, Baro
+& 9 (+ Baro)
+& 238 / 476 (Beschl.)
+& 15
+& Bedingt geeignet: Taillendaten nutzbar, hohe Abtastrate, aber nur 15 (junge) Probanden und Messbereich $\pm 8$\,g kann an peripheren Positionen clippen (vgl.\ Abschnitt~\ref{sec:range}). \\
+
+UniMiB SHAR \cite{unimib2017}
+& Smartphone (Samsung Galaxy Nexus) in der Hosentasche
+& 3
+& 50
+& 30 (18--60~J.)
+& Eingeschränkt geeignet: rein 3-achsig (nur Beschleunigungssensor), daher für einen theoretischen 3- vs.\ 6-Achsen-Vergleich hilfreich, aber nicht für ein realistisches 6-Achsen-Modell. \\
+
+WEDA-FALL \cite{wedafall2023}
+& Fitbit Sense Smartwatch am Handgelenk
+& 6
+& 50
+& 25 (14 jung, 11 ältere $>$80\,J.)
+& Bedingt geeignet: Handgelenk-Position weicht stark von der Fußposition ab; niedrige Abtastrate (50\,Hz); enthält jedoch Daten älterer Probanden, was für Kreuzvalidierung nützlich sein kann. \\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Einzelbewertung}
+\label{sec:dataset_details}
+
+\textbf{SisFall} wurde an der Universidad de Antioquia erhoben und umfasst
+4505 Aufzeichnungen (2707 ADL, 1798 simulierte Stürze) von 38 Probanden,
+darunter 15 Personen im Alter von 60 bis 75 Jahren
+\cite{sucerquia2017sisfall}. Die Sensoreinheit wurde am Gürtel (Hüfte)
+befestigt und besteht aus \emph{zwei} Beschleunigungssensoren (ADXL345 mit
+$\pm 16$\,g und MMA8451Q mit $\pm 8$\,g) sowie einem Gyroskop (ITG3200
+mit $\pm 2000\,^{\circ}/\mathrm{s}$), aufgezeichnet mit einer Abtastrate
+von 200\,Hz. Die redundante Beschleunigungsmessung entspricht der Angabe
+der Aufgabenstellung von ,,zwei Beschleunigungssensoren + Gyroskop`` und
+wurde in einer früheren Fassung dieser Arbeit unzutreffend als
+Einzelsensor beschrieben. SisFall ist der am häufigsten zitierte Benchmark
+für die sensorbasierte Sturzerkennung, was eine direkte Vergleichbarkeit
+der eigenen Ergebnisse mit der Literatur ermöglicht. Die
+6-Achsen-Konfiguration (Beschleunigung + Gyroskop) stimmt mit der in
+Kapitel~\ref{ch:comparison} empfohlenen Achsenwahl überein. Einschränkend
+ist anzumerken, dass die älteren Probanden nur ADL durchführten und keine
+simulierten Stürze, sodass die Sturzdaten ausschließlich von jungen
+Erwachsenen stammen.
+
+\textbf{MobiFall und MobiAct} basieren auf Smartphone-Sensorik und wurden an
+der Technischen Hochschule Kreta erhoben \cite{mobifall2014,mobiact2016}.
+MobiAct umfasst 57 Probanden, 4 Sturztypen und 9 ADL; die Daten wurden mit
+dem eingebauten Beschleunigungssensor und Gyroskop eines Samsung Galaxy S3
+aufgezeichnet. Der Messbereich der Smartphone-Beschleunigungssensoren liegt
+häufig nur bei $\pm 2$\,g, was für die Sturzerkennung zu Clipping führen
+kann (vgl.\ Abschnitt~\ref{sec:range}). Darüber hinaus unterscheidet sich
+die Trageposition (Hosentasche) grundlegend von einer Insole, sodass eine
+Übertragbarkeit der Bewegungsmuster auf die Fußsohle nicht ohne Weiteres
+gegeben ist.
+
+\textbf{UMAFall} setzt einen Mehrknoten-Aufbau mit vier SensorTags
+(MPU-9250, je Beschleunigungssensor, Gyroskop und Magnetometer) und einem
+Smartphone ein \cite{umafall2017}. Durch die gleichzeitige Erfassung an Brust,
+Hüfte, Handgelenk und Knöchel ermöglicht dieser Datensatz die
+Untersuchung positionsabhängiger Effekte. Die Abtastrate der SensorTags
+beträgt allerdings nur 20\,Hz, und es sind lediglich drei Sturztypen
+enthalten. Für den vorliegenden Anwendungsfall bieten die Knöcheldaten
+zwar eine gewisse Nähe zur Fußposition, die geringe Abtastrate und
+begrenzte Sturzdiversität schränken den praktischen Nutzen jedoch ein.
+
+\textbf{KFall} wurde am KAIST in Südkorea erhoben und umfasst 5075
+Aufzeichnungen (2729 ADL, 2346 Stürze) von 32 Probanden
+\cite{kfall2021}. Zum Einsatz kam eine 9-Achsen-IMU (Xsens MTw~Awinda) am
+unteren Rücken; die veröffentlichten Datenfiles enthalten die
+3-Achsen-Beschleunigung, die 3-Achsen-Winkelgeschwindigkeit sowie die per
+Sensorfusion abgeleiteten Euler-Winkel bei 100\,Hz. Für den Vergleich
+mit einer geplanten reinen 6-Achsen-Sensorik können die Euler-Kanäle
+verworfen und lediglich Beschleunigung und Winkelgeschwindigkeit
+verwendet werden. Eine Besonderheit von KFall ist die zeitliche
+Annotation des Sturzbeginns und des Aufprallzeitpunkts anhand
+synchronisierter Videoaufnahmen, was den Datensatz insbesondere für die
+Pre-Impact-Erkennung wertvoll macht. KFall bietet damit eine gute
+Ergänzung zu SisFall, da die simulierten Sturztypen aus SisFall
+übernommen wurden, die Abtastrate hinreichend hoch ist und die
+Pre-Impact-Annotation Zusatzinformationen für die Merkmalsextraktion
+liefert. Einschränkend ist, dass sämtliche Probanden junge Erwachsene
+waren.
+
+\textbf{FallAllD} enthält Daten von drei gleichzeitig getragenen IMUs
+(LSM9DS1), die am Nacken, am Handgelenk und an der Taille befestigt waren
+\cite{fallalld2020}. Damit weicht die Sensorposition von der Angabe
+in der Aufgabenstellung (Hals, Brust, Taille) ab; entscheidend ist die Position
+am Handgelenk anstelle der Brust, wie die offizielle Beschreibung des
+Datensatzes auf IEEE~DataPort bestätigt. Die Abtastrate ist mit 238\,Hz
+für Beschleunigungssensor und Gyroskop hoch, die Sensoren umfassen zusätzlich
+ein Magnetometer und ein Barometer. Der Datensatz deckt zahlreiche Sturz-
+und ADL-Typen ab und ist hinsichtlich der Bewegungsvielfalt umfangreicher
+als die meisten anderen betrachteten Kandidaten. Einschränkend sind der
+gegenüber SisFall geringere Messbereich von $\pm 8$\,g sowie die kleine
+Probandenzahl von 15 (jungen) Personen. Für den vorliegenden Anwendungsfall
+sind vor allem die Aufzeichnungen am Taillensensor relevant, da sie in der
+Kinematik am ehesten den bisherigen Benchmark-Datensätzen entsprechen.
+
+\textbf{UniMiB SHAR} ist ein reiner 3-Achsen-Datensatz
+(Beschleunigungssensor, 50\,Hz) von Smartphone-Aufzeichnungen aus der
+Hosentasche \cite{unimib2017}. Er umfasst 11\,771 Samples von 30 Probanden mit
+9 ADL und 8 Sturztypen. Da kein Gyroskop vorhanden ist, eignet sich dieser
+Datensatz nicht für die Entwicklung eines 6-Achsen-Modells, kann aber
+hilfsweise als Vergleichsbasis für die Frage herangezogen werden, welchen
+Mehrwert die sechste Achse bringt (vgl.\ Kapitel~\ref{ch:comparison}).
+
+\textbf{WEDA-FALL} wurde mit einer Fitbit Sense Smartwatch am Handgelenk
+aufgenommen und enthält Beschleunigungs- und Gyroskop-Daten mit einer
+nativen Abtastrate von 50\,Hz \cite{wedafall2023}. Nach Angabe der
+Aufgabenstellung stellt WEDA-FALL zusätzlich vordefinierte
+Downsampling-Varianten bei 40, 25, 10 und 5\,Hz bereit. Diese
+Mehrfach-Abtastraten bilden ein zusätzliches Argument für die Aufnahme
+von WEDA-FALL in die engere Auswahl: Der Einfluss der in
+Kapitel~\ref{ch:properties} diskutierten Abtastrate lässt sich damit an
+identischen Bewegungssequenzen kontrolliert isolieren, was in keinem der
+übrigen Datensätze möglich ist. Eine weitere Stärke ist die Einbeziehung
+von 11 älteren Probanden (über 80 Jahre), was unter den hier betrachteten
+Datensätzen einzigartig ist. Die Handgelenk-Position weicht jedoch stark
+von einer Fußsohle ab, und die vergleichsweise niedrige native
+Abtastrate begrenzt die Auflösung hochdynamischer Phasen. WEDA-FALL ist
+daher vor allem für handgelenkbasierte Szenarien relevant und bietet
+sich für eine Kreuzvalidierung des Modells sowie für gezielte
+Ablationsstudien zur Abtastrate an.
+
+\section{Verfügbarkeit und Zugänglichkeit}
+\label{sec:dataset_availability}
+
+Neben den inhaltlichen Kriterien nennt die Aufgabenstellung ausdrücklich
+die \emph{Verfügbarkeit und Zugänglichkeit} der Datensätze als
+Bewertungskriterium. Tabelle~\ref{tab:availability} stellt für jeden der
+sieben Kandidaten die offizielle Bezugsquelle, die Art des Zugangs sowie
+die Lizenz zusammen. Der Zugang reicht dabei von einem unmittelbaren
+Direktdownload ohne Registrierung (UMAFall, KFall, WEDA-FALL) über
+einfache Kontoerstellungen (FallAllD via IEEE~DataPort) bis hin zu einem
+formal zu unterzeichnenden Nutzungsvertrag mit dem herausgebenden Institut
+(MobiFall/MobiAct). Für die zeitliche Planung des ML-Teils in Aufgabe~4
+ist insbesondere zu berücksichtigen, dass die Freigabe der
+MobiFall/MobiAct-Daten eine mehrtägige Bearbeitungszeit erfordert und
+daher frühzeitig zu beantragen ist. Für SisFall wurde im Rahmen dieser
+Arbeit festgestellt, dass die in mehreren Publikationen zitierte URL
+zeitweise nicht erreichbar war; die Daten sind derzeit jedoch wieder über
+die Projektseite des SISTEMIC-Labors an der Universidad de Antioquia
+abrufbar.
+
+\begin{table}[H]
+\centering
+\caption{Verfügbarkeit und Zugänglichkeit der betrachteten Datensätze.}
+\label{tab:availability}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\textwidth}{
+>{\raggedright\arraybackslash}p{1.7cm}
+>{\raggedright\arraybackslash}X
+>{\raggedright\arraybackslash}p{3.0cm}
+>{\raggedright\arraybackslash}p{2.4cm}
+}
+\toprule
+\textbf{Datensatz} &
+\textbf{Bezugsquelle} &
+\textbf{Zugangsverfahren} &
+\textbf{Lizenz} \\
+\midrule
+
+SisFall
+& SISTEMIC, Univ.\ de Antioquia (Kolumbien)
+& Direktdownload; URL zeitweise nicht erreichbar
+& CC~BY~4.0 \\
+
+MobiFall / MobiAct
+& BMI Lab, Hellenic Mediterranean University (Griechenland)
+& Auf Anfrage per E-Mail; unterschriebener Nutzungsvertrag erforderlich
+& Nur nicht-kommerzielle Forschung \\
+
+UMAFall
+& Figshare\slash Univ.\ de Málaga (DOI 10.6084/m9.figshare.4214283)
+& Direktdownload ohne Registrierung
+& Angabe der Autoren-Publikationen \\
+
+KFall
+& KAIST, Google Sites (\emph{sites.google.com/view/kfalldataset})
+& Direktdownload ohne Registrierung
+& Zitierpflicht \\
+
+FallAllD
+& IEEE DataPort (Open Access)
+& Kostenfreier IEEE-Account (keine IEEE-Mitgliedschaft erforderlich)
+& Open Access, Zitierpflicht \\
+
+UniMiB SHAR
+& SAL-Lab, Univ.\ Milano-Bicocca (Italien)
+& Direktdownload; Spiegelkopie auf Kaggle verfügbar
+& Nur nicht-kommerzielle Forschung \\
+
+WEDA-FALL
+& GitHub-Repository von J.~Marques (IST Lissabon)
+& Direktdownload / \texttt{git clone}
+& Zitierpflicht \\
+
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Alle in dieser Übersicht genannten Datensätze sind für den akademischen
+Gebrauch grundsätzlich zugänglich; die formalen Anforderungen
+unterscheiden sich jedoch erheblich hinsichtlich Aufwand und
+Bearbeitungszeit. Für die weitere Bearbeitung in Aufgabe~4 wurde
+sichergestellt, dass die im nächsten Abschnitt als Primär- und
+Sekundärdatensätze ausgewählten Ressourcen ohne administrative
+Verzögerungen zur Verfügung stehen.
+
+\section{Begründete Entscheidung}
+\label{sec:dataset_decision}
+
+Auf Basis der oben aufgeführten Kriterien wird \textbf{SisFall} als
+primärer Datensatz für die Modellentwicklung in Aufgabe~4 ausgewählt.
+Die Gründe für diese Wahl lassen sich wie folgt zusammenfassen:
+
+\begin{enumerate}
+\item Die \textbf{6-Achsen-Konfiguration} stimmt mit der in
+      Kapitel~\ref{ch:comparison} begründeten Empfehlung überein.
+\item Der \textbf{Messbereich} von $\pm 16$\,g bietet den in
+      Abschnitt~\ref{sec:range} diskutierten Sicherheitspuffer gegen
+      Clipping, insbesondere für periphere Körperpositionen.
+\item Die \textbf{hohe Abtastrate} von 200\,Hz erlaubt ein Downsampling auf
+      den in Abschnitt~\ref{sec:samplingrate} empfohlenen Bereich
+      ($20$--$50$\,Hz) ohne Informationsverlust.
+\item Die \textbf{große Probandenzahl} (38, davon 15 Ältere) und die
+      Vielfalt an Sturz- und ADL-Typen (15 bzw.\ 19) ermöglichen eine
+      belastbare probandenübergreifende Validierung.
+\item Der \textbf{etablierte Benchmarkstatus} in der Literatur stellt sicher,
+      dass die eigenen Ergebnisse unmittelbar mit publizierten Arbeiten
+      verglichen werden können.
+\end{enumerate}
+
+Als ergänzender Datensatz bietet sich \textbf{KFall} an, da er eine
+vergleichbare Sensorik, eine ausreichende Abtastrate und insbesondere die
+zeitliche Pre-Impact-Annotation liefert, die für zukünftige Erweiterungen
+des Modells relevant sein kann.
+
+%------------------------------------------------------------------
+\chapter{Verlauf der Modellentwicklung (Aufgabe~4 Zwischenstand)}
+\label{ch:verlauf}
+
+Die vorausgehenden Kapitel haben die theoretischen Grundlagen gelegt:
+Kapitel~\ref{ch:comparison} begründet die Wahl einer 6-Achsen-IMU,
+Kapitel~\ref{ch:properties} leitet den empfohlenen Arbeitspunkt ab
+($\pm 16$\,g, $20$--$50$\,Hz, $\geq 12$~Bit) und
+Kapitel~\ref{ch:datasets} wählt SisFall als primären Datensatz.
+Das vorliegende Kapitel dokumentiert den bisherigen Verlauf der
+praktischen Modellentwicklung im Rahmen von Aufgabe~4 und stellt die
+ersten quantitativen Ergebnisse vor. Sämtliche Experimente wurden mit
+Python~3.12 unter Verwendung von NumPy, SciPy, scikit-learn und
+TensorFlow/Keras durchgeführt. Der vollständige Quellcode ist im
+begleitenden Repository verfügbar.
+
+\section{Datenaufbereitung}
+\label{sec:preprocessing}
+
+Als Trainingsdatensatz dient SisFall \cite{sucerquia2017sisfall} mit
+4505 Aufzeichnungen (2707~ADL, 1798~simulierte Stürze) von
+38~Probanden. Die Rohdaten liegen als kommaseparierte Textdateien mit
+neun Spalten vor (zwei Beschleunigungssensoren und ein Gyroskop, jeweils
+als ADC-Rohwerte). Für die Modellentwicklung werden ausschließlich die
+Kanäle des ADXL345 ($\pm 16$\,g) und des ITG3200
+($\pm 2000\,^{\circ}/\mathrm{s}$) verwendet, da sie der in
+Kapitel~\ref{ch:properties} empfohlenen Spezifikation entsprechen und
+zugleich mit dem für den Prototyp vorgesehenen MPU-6050 kompatibel sind.
+Die ADC-Rohwerte werden anhand der Herstellerkonstanten in
+physikalische Einheiten umgerechnet:
+
+\begin{equation}
+a\,[\mathrm{g}] = \mathrm{raw} \cdot \frac{2 \cdot 16}{2^{13}},
+\qquad
+\omega\,[^{\circ}/\mathrm{s}] = \mathrm{raw} \cdot \frac{2 \cdot 2000}{2^{16}}.
+\label{eq:conversion}
+\end{equation}
+
+Anschließend wird das Signal von der ursprünglichen Abtastrate
+($200$\,Hz) auf die Zielrate ($50$\,Hz) heruntergetastet. Die
+Segmentierung erfolgt in gleitenden Fenstern der Länge $2$\,s mit
+$50\,\%$ Überlappung. Bei Sturzaufzeichnungen wird das Fenster auf den
+Zeitpunkt des maximalen Beschleunigungsbetrags (Impact) zentriert, um
+sicherzustellen, dass das Klassifikationsziel tatsächlich die
+sturzrelevante Signatur enthält und nicht einen beliebigen ruhigen
+Abschnitt derselben Aufnahme. Die resultierenden Fenster haben die
+Dimension $100 \times 6$ (100~Abtastwerte $\times$ 6~Kanäle).
+
+\section{Modell~1: Schwellwert-Baseline}
+\label{sec:threshold}
+
+Als erste Referenz dient ein klassischer Schwellwertalgorithmus nach
+Bourke \cite{bagala2012}: Ein Fenster wird genau dann als Sturz
+klassifiziert, wenn der Betrag der Beschleunigung sowohl einen unteren
+Freifall-Schwellwert von $0{,}6$\,g unterschreitet als auch einen
+oberen Impact-Schwellwert von $2{,}0$\,g überschreitet. Dieser
+Algorithmus benötigt weder Training noch Merkmalsextraktion und bildet
+damit die einfachste realisierbare Baseline.
+
+\textbf{Ergebnis:} Sensitivität $96{,}7\,\%$, Spezifität $76{,}8\,\%$,
+Genauigkeit $77{,}5\,\%$. Die hohe Sensitivität bestätigt, dass das
+Schwellwertverfahren die meisten Stürze erkennt. Die niedrige
+Spezifität zeigt jedoch das in Kapitel~\ref{ch:comparison} diskutierte
+Kernproblem: Sturzähnliche Alltagsaktivitäten wie schnelles Hinsetzen
+lösen ebenfalls Alarm aus.
+
+\section{Modell~2: Random Forest mit Magnitude-Features}
+\label{sec:randomforest}
+
+Um die Spezifität zu verbessern, werden aus jedem Fenster 18
+rotationsinvariante Merkmale extrahiert, die ausschließlich auf dem
+Betrag (\ac{SVM}) der Beschleunigung und der Winkelgeschwindigkeit
+basieren. Zu den Merkmalen zählen unter anderem Mittelwert,
+Standardabweichung, Maximum, Minimum, Spannweite, RMS-Wert, Energie,
+Schiefe, Kurtosis, Jerk-Standardabweichung und Signal Magnitude Area.
+Die bewusste Beschränkung auf Betragsgrößen macht die Merkmale
+weitgehend unabhängig von der Orientierung des Sensors am Körper und
+trägt damit zur Robustheit gegenüber dem in Abschnitt~\ref{sec:domain}
+diskutierten Positionswechsel bei.
+
+Ein Random-Forest-Klassifikator mit 200~Bäumen und balancierter
+Klassengewichtung wird mittels subjektunabhängiger
+Kreuzvalidierung (GroupKFold, 5~Folds) bewertet, wobei die
+Gruppierungsvariable der Proband ist. Damit wird sichergestellt, dass
+keine Daten desselben Probanden gleichzeitig in Training und Test
+auftreten.
+
+\textbf{Ergebnis:} Sensitivität $94{,}2\,\%$, Spezifität $99{,}6\,\%$,
+Genauigkeit $99{,}4\,\%$. Die Spezifität steigt gegenüber der
+Schwellwert-Baseline von $76{,}8\,\%$ auf $99{,}6\,\%$, was die Anzahl
+falsch-positiver Alarme um den Faktor~$50$ reduziert. Die
+Feature-Importance-Analyse des Random Forest bestätigt die
+Schlussfolgerung aus Kapitel~\ref{ch:comparison}: Vier der fünf
+wichtigsten Merkmale basieren auf dem Gyroskop
+(\texttt{gyr\_std}, \texttt{gyr\_max}, \texttt{gyr\_energy},
+\texttt{gyr\_rms}), was den Beitrag der sechsten Achse zur
+Falsch-Positiv-Reduktion quantitativ belegt.
+
+\section{Modell~3: 1D-CNN}
+\label{sec:cnn}
+
+Als drittes und leistungsfähigstes Modell wird ein eindimensionales
+Convolutional Neural Network (1D-CNN) trainiert, das direkt auf den
+rohen 6-Kanal-Fenstern ($100 \times 6$) arbeitet und keine
+handgefertigte Merkmalsextraktion benötigt. Die Architektur umfasst
+drei Faltungsblöcke mit aufsteigender Filterzahl (32, 64, 128),
+jeweils gefolgt von Batch-Normalisierung und Max-Pooling, sowie einen
+Global-Average-Pooling-Kopf und zwei vollvernetzte Schichten mit
+Dropout ($p = 0{,}3$). Das Modell wird mit dem Adam-Optimierer
+(Lernrate $10^{-3}$), binärer Kreuzentropie und klassenbalancierten
+Gewichten über 30~Epochen trainiert.
+
+Die Bewertung erfolgt auf einem subjektunabhängigen Testsplit
+($25\,\%$ der Probanden, 10~Subjekte, insgesamt 13\,031~Fenster).
+
+\textbf{Ergebnis:} Sensitivität $98{,}0\,\%$, Spezifität $99{,}7\,\%$,
+Genauigkeit $99{,}6\,\%$. Im Vergleich zum Random Forest sinkt die
+Anzahl übersehener Stürze von 105 auf 18 (False Negatives), während
+die Anzahl der Fehlalarme von 215 auf 39 (False Positives) zurückgeht.
+Das Modell umfasst 45\,601~Parameter (178\,KB) und konvergiert
+innerhalb von 30~Epochen ohne Anzeichen von Overfitting, wie die
+Trainingskurven in Abbildung~\ref{fig:training} belegen.
+
+% Platzhalter für die Trainingskurven
+% \begin{figure}[H]
+%   \centering
+%   \includegraphics[width=0.9\textwidth]{cnn_training.png}
+%   \caption{Verlauf von Loss und Sensitivität über 30 Epochen (Training und Validation).}
+%   \label{fig:training}
+% \end{figure}
+
+\section{Vergleich der drei Modelle}
+\label{sec:comparison_models}
+
+Tabelle~\ref{tab:results} fasst die Ergebnisse zusammen.
+
+\begin{table}[H]
+\centering
+\caption{Vergleich der drei Sturzerkennungsmodelle auf SisFall (subjektunabhängig).}
+\label{tab:results}
+\small
+\begin{tabularx}{\textwidth}{l C{2cm} C{2cm} C{2cm} C{1.5cm} C{1.5cm}}
+\toprule
+\textbf{Modell} & \textbf{Sensitivität} & \textbf{Spezifität} & \textbf{Genauigkeit} & \textbf{FP} & \textbf{FN} \\
+\midrule
+Schwellwert (Bourke)   & 96,7\,\% & 76,8\,\% & 77,5\,\% & 11\,503 & 59 \\
+Random Forest          & 94,2\,\% & 99,6\,\% & 99,4\,\% & 215     & 105 \\
+\textbf{1D-CNN}        & \textbf{98,0\,\%} & \textbf{99,7\,\%} & \textbf{99,6\,\%} & \textbf{39} & \textbf{18} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Der stufenweise Aufbau zeigt, dass jedes nachfolgende Modell den
+vorhergehenden Schwachpunkt adressiert: Der Random Forest behebt die
+niedrige Spezifität der Schwellwertmethode, und das 1D-CNN verbessert
+zusätzlich die Sensitivität bei gleichzeitig nochmals reduzierter
+Fehlalarmrate.
+
+\section{TFLite-Export für den Mikrocontroller}
+\label{sec:tflite}
+
+Für den Einsatz auf dem ESP32-C6 wird das trainierte Keras-Modell
+mittels des TensorFlow-Lite-Konverters in ein vollständig
+int8-quantisiertes Modell überführt. Die Quantisierung verwendet einen
+repräsentativen Kalibrierungsdatensatz aus 200~zufällig gewählten
+Trainingsfenstern. Das resultierende \texttt{.tflite}-Modell hat eine
+Größe von lediglich \textbf{64\,KB} und passt damit problemlos in den
+4\,MB großen Flash-Speicher des ESP32-C6. Die Inferenzzeit für ein
+einzelnes Fenster wird auf dem Zielprozessor im Bereich weniger
+Millisekunden erwartet, sodass eine Echtzeitklassifikation bei der
+gewählten Abtastrate ($50$\,Hz, Fenster alle $1$\,s) gewährleistet ist.
+
+\section{Domänenlücke und Mitigationsstrategien}
+\label{sec:domain}
+
+Der SisFall-Datensatz wurde mit einer am Gürtel (Hüfte) getragenen
+Sensoreinheit aufgenommen, während das Zielsystem eine
+schuhsohlenintegrierte Anbringung vorsieht. Diese Positionsänderung
+stellt die wesentliche Domänenlücke dar, da sich die Kinematik der
+Fußbewegung grundlegend von der des Rumpfes unterscheidet: Beim Gehen
+erzeugt der Fersenaufsatz (Heel Strike) Beschleunigungsspitzen, die
+denen eines leichten Stoßereignisses ähneln und somit die
+Falsch-Positiv-Rate erhöhen können.
+
+Um die Übertragbarkeit zu verbessern, wurden bereits in der aktuellen
+Pipeline mehrere Maßnahmen umgesetzt:
+
+\begin{enumerate}
+\item \textbf{Rotationsinvariante Merkmale:} Die Random-Forest-Features
+      basieren ausschließlich auf Betragsgrößen (\ac{SVM}), die
+      unabhängig von der Orientierung des Sensors sind.
+\item \textbf{Per-Window-Normalisierung:} Jedes Fenster wird vor der
+      Eingabe in das CNN auf Mittelwert~0 und Standardabweichung~1
+      normiert, wodurch positionsabhängige Gleichanteile (z.\,B.\
+      unterschiedliche Gravitationsprojektion) eliminiert werden.
+\item \textbf{Subjektunabhängige Validierung:} Die Aufteilung nach
+      Probanden stellt sicher, dass die berichteten Kennzahlen nicht
+      durch probandenspezifische Muster überschätzt werden.
+\end{enumerate}
+
+Für die verbleibende Domänenlücke ist ein \emph{Pilot-Fußdatensatz}
+geplant: Mit dem für den Prototyp vorgesehenen MPU-6050 auf dem
+ESP32-C6 werden Daten direkt am Fuß aufgezeichnet (Gehen, Laufen,
+Treppensteigen, Hinsetzen sowie simulierte Stürze auf eine Matte).
+Anschließend werden die letzten Schichten des trainierten CNN mittels
+Transfer Learning auf diesen Datensatz feinabgestimmt (Fine-Tuning).
+Erste Arbeiten mit dem UMAFall-Knöcheldatensatz
+\cite{umafall2017}, der die nächstgelegene öffentlich verfügbare
+Sensorposition bietet, sind als Zwischenschritt vorgesehen.
+
+\section{Nächste Schritte}
+\label{sec:nextsteps}
+
+Die folgenden Arbeitsschritte sind für den verbleibenden
+Projektzeitraum geplant:
+
+\begin{enumerate}
+\item \textbf{Ablationsstudie zur Abtastrate:} Wiederholung des
+      CNN-Trainings bei $10$, $20$ und $50$\,Hz, um die in
+      Kapitel~\ref{ch:properties} diskutierte Empfehlung experimentell
+      zu überprüfen.
+\item \textbf{Kreuzvalidierung auf KFall:} Training auf SisFall,
+      Test auf KFall \cite{kfall2021} und umgekehrt, um die
+      Generalisierbarkeit über Datensatzgrenzen hinweg zu bewerten.
+\item \textbf{Hardware-Integration:} Aufbau des ESP32-C6 + MPU-6050
+      Prototyps, Portierung des int8-TFLite-Modells mittels
+      \texttt{esp-tflite-micro} oder Edge Impulse und Messung der
+      On-Device-Inferenzzeit sowie des Energieverbrauchs.
+\item \textbf{Pilotdatenerhebung am Fuß:} Aufzeichnung eines kleinen
+      Fußdatensatzes zur Validierung und zum Fine-Tuning.
+\item \textbf{Long-Lie-Erkennung:} Implementierung einer zweiten
+      Erkennungsstufe, die nach einem erkannten Sturz die
+      Bewegungslosigkeit überwacht und bei anhaltender Liegeposition
+      ($> 60$\,s) einen Notfallalarm auslöst.
+\end{enumerate}
+
+%------------------------------------------------------------------
+%   BIBLIOGRAPHY
+%------------------------------------------------------------------
+\newpage
+\bibliography{references}
+
+%------------------------------------------------------------------
+%   VERSICHERUNG (Selbstständigkeitserklärung)
+%------------------------------------------------------------------
+\newpage
+\thispagestyle{empty}
+\vspace*{2cm}
+\section*{Versicherung}
+Ich versichere, dass ich diese Arbeit selbstständig verfasst und keine anderen
+als die angegebenen Hilfsmittel benutzt habe. Die den benutzten Hilfsmitteln
+wörtlich oder inhaltlich entnommenen Stellen habe ich unter Quellenangaben
+kenntlich gemacht. Die Arbeit hat in gleicher oder ähnlicher Form noch keiner
+anderen Prüfungsbehörde vorgelegen.
+
+\vspace{1cm}
+\noindent I declare that I have authored this thesis independently, that I have
+not used other than the declared sources / resources and that I have explicitly
+marked all material which has been quoted either literally or by content from
+the used sources.
+
+\vspace{3cm}
+\noindent
+\rule{6cm}{0.4pt}\hfill\rule{6cm}{0.4pt}\\
+\hspace*{1cm}Place, Date\hfill Aly Elbermawy\hspace*{2cm}
+
+\end{document}
