@@ -48,7 +48,7 @@ N_FALL_WIN   = 3
 
 # Fine-Tuning
 DO_FINETUNE  = True
-FT_EPOCHS    = 20
+FT_EPOCHS    = 60
 FT_LR        = 1e-4          # kleine Lernrate: vortrainierte Merkmale erhalten
 FT_TEST_SIZE = 0.3           # Anteil Subjekte im Test
 FREEZE_UPTO  = 6             # erste N Schichten einfrieren (Conv-Bloecke 1-2)
