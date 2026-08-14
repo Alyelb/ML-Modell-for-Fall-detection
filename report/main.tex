@@ -1329,19 +1329,26 @@ fassen die Ergebnisse zusammen.
 
 \begin{table}[H]
 \centering
-\caption{Cross-Position-Transfer vom Hüft- auf den Knöchelsensor
-         (identischer, subjektunabhängiger Testsplit).}
+\caption{Ergebnisse der Transferexperimente. Alle Werte auf
+         subjektunabhängigen Testsplits; Fine-Tuning mit 60~Epochen.}
 \label{tab:crossposition}
 \small
-\begin{tabularx}{\textwidth}{l C{2.4cm} C{2.4cm} C{2.4cm}}
+\begin{tabularx}{\textwidth}{l l C{2.1cm} C{2.1cm} C{2.1cm}}
 \toprule
-\textbf{Bedingung} & \textbf{Sensitivität} & \textbf{Spezifität} & \textbf{Genauigkeit} \\
+\textbf{Experiment} & \textbf{Bedingung} & \textbf{Sensitivität} & \textbf{Spezifität} & \textbf{Genauigkeit} \\
 \midrule
-Referenz: SisFall (Hüfte)   & 98,0\,\% & 99,7\,\% & 99,6\,\% \\
-Zero-Shot auf Knöchel       & 34,8\,\% & 92,2\,\% & 88,5\,\% \\
-Nach Fine-Tuning            & 77,3\,\% & 80,7\,\% & 80,5\,\% \\
+Referenz SisFall (Hüfte, 50\,Hz) & Test       & 98,0\,\% & 99,7\,\% & 99,6\,\% \\
 \midrule
-\textbf{Differenz (Fine-Tuning)} & \textbf{+42,6\,pp} & $-11{,}5$\,pp & $-8{,}1$\,pp \\
+UMAFall Taille (Kontrolle)       & Zero-Shot  & 42,2\,\% & 97,4\,\% & 92,6\,\% \\
+                                 & Fine-Tuned & 92,2\,\% & 97,3\,\% & 96,9\,\% \\
+\midrule
+UMAFall Knöchel                  & Zero-Shot  & 34,8\,\% & 92,2\,\% & 88,5\,\% \\
+                                 & Fine-Tuned & 80,1\,\% & 94,7\,\% & 93,8\,\% \\
+\midrule
+SisFall bei 20\,Hz               & Test       & 96,8\,\% & 99,3\,\% & 99,1\,\% \\
+\midrule
+UMAFall Knöchel bei 20\,Hz       & Zero-Shot  & 34,0\,\% & 95,6\,\% & 91,6\,\% \\
+                                 & Fine-Tuned & 78,0\,\% & 95,0\,\% & 93,9\,\% \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -1356,77 +1363,85 @@ Nach Fine-Tuning            & 77,3\,\% & 80,7\,\% & 80,5\,\% \\
 
 \subsection{Interpretation}
 
-Drei Befunde sind hervorzuheben.
+Die Kontrollexperimente führen zu einem Ergebnis, das der ursprünglichen
+Arbeitshypothese teilweise widerspricht und daher besonders
+hervorzuheben ist.
 
-\textbf{Erstens ist die Domänenlücke erheblich.} Das Modell, das an der
-Hüfte eine Sensitivität von $98{,}0\,\%$ erreicht, erkennt am Knöchel
-ohne Anpassung nur noch $34{,}8\,\%$ der Stürze. Rund zwei Drittel
-aller Stürze würden somit übersehen. Bemerkenswert ist, dass die
-Spezifität mit $92{,}2\,\%$ vergleichsweise hoch bleibt: Das Modell
-klassifiziert im Zweifelsfall als ADL und wird dadurch
-\emph{konservativ} statt fehleranfällig. Für eine
-sicherheitskritische Anwendung ist gerade der Sensitivitätsverlust
-jedoch der kritische Befund. Damit ist belegt, dass eine
-unveränderte Übernahme eines hüftbasierten Modells auf die
-Sohlenposition nicht zulässig ist.
+\textbf{Erstens dominiert nicht die Sensorposition, sondern der
+Datensatzwechsel.} Der Taillensensor von UMAFall entspricht der
+Aufnahmeposition von SisFall. Wäre die Position die maßgebliche
+Ursache des Leistungsabfalls, müsste die Sensitivität dort nahezu
+erhalten bleiben. Tatsächlich fällt sie jedoch bereits an der Taille
+von $98{,}0\,\%$ auf $42{,}2\,\%$. Der Anteil, der zusätzlich auf den
+Wechsel von der Taille zum Knöchel entfällt, beträgt lediglich
+weitere $7{,}4$~Prozentpunkte (auf $34{,}8\,\%$). Die
+Domänenlücke ist somit zu etwa $55{,}8$~Prozentpunkten dem
+Datensatzwechsel (abweichende Sensorhardware, Aufnahmeprotokoll,
+Probandenkollektiv und Sturztypen) und nur zu rund
+$7$~Prozentpunkten der Sensorposition zuzuschreiben. Auch nach dem
+Fine-Tuning bleibt der reine Positionsanteil mit
+$92{,}2\,\%$ gegenüber $80{,}1\,\%$ moderat.
 
-\textbf{Zweitens ist Transfer Learning wirksam.} Das Fine-Tuning auf
-vergleichsweise wenigen Knöcheldaten hebt die Sensitivität von
-$34{,}8\,\%$ auf $77{,}3\,\%$, also um mehr als das Doppelte. Der
-gleichzeitige Rückgang der Spezifität um $11{,}5$~Prozentpunkte
-entspricht dem erwarteten Kompromiss: Das Modell wird empfindlicher
-und meldet häufiger. Dieses Ergebnis bestätigt die methodische
-Grundannahme des Projekts, dass die Lücke durch eine vergleichsweise
-kleine Menge positionsspezifischer Daten geschlossen werden kann --
-und begründet damit die geplante Erhebung des Pilot-Fußdatensatzes
-nicht nur plausibel, sondern empirisch.
+\textbf{Zweitens ist die Abtastrate als Störfaktor auszuschließen.}
+Die Vermutung, das notwendige Hochtasten der UMAFall-Daten von
+$20$\,Hz auf $50$\,Hz trage wesentlich zum Leistungsabfall bei,
+bestätigt sich nicht: Wird das Modell direkt bei $20$\,Hz trainiert
+und ohne Hochtasten übertragen, ändert sich die Zero-Shot-Sensitivität
+nur von $34{,}8\,\%$ auf $34{,}0\,\%$. Die Abtastrate erklärt den
+Effekt folglich nicht.
 
-\textbf{Drittens sind die absoluten Werte nach dem Fine-Tuning noch
-nicht praxistauglich.} Hierfür kommen mehrere Ursachen in Betracht,
-die in weiteren Experimenten (Abschnitt~\ref{sec:nextsteps})
-systematisch getrennt werden: die begrenzte Trainingsdauer, die
-Beschränkung von UMAFall auf drei Sturztypen, das starke
-Klassenungleichgewicht ($471$ zu $6329$ Fenster) sowie insbesondere
-der Abtastraten-Störfaktor. Da UMAFall nativ mit $20$\,Hz aufzeichnet,
-das Modell jedoch für $50$\,Hz trainiert wurde, fügt das erforderliche
-Hochtasten keine zusätzliche Information hinzu. Ein Teil des
-beobachteten Leistungsabfalls ist daher möglicherweise nicht auf die
-Sensorposition, sondern auf die Abtastrate zurückzuführen. Die
-folgenden Kontrollexperimente dienen dazu, beide Effekte voneinander
-zu trennen.
+\textbf{Drittens bestätigt das Experiment die Abtastratenempfehlung aus
+Kapitel~\ref{ch:properties} empirisch.} Das ausschließlich auf
+SisFall trainierte Modell erreicht bei $20$\,Hz eine Sensitivität von
+$96{,}8\,\%$ und eine Spezifität von $99{,}3\,\%$ gegenüber
+$98{,}0\,\%$ bzw.\ $99{,}7\,\%$ bei $50$\,Hz. Eine Reduktion der
+Abtastrate um $60\,\%$ kostet somit lediglich rund einen
+Prozentpunkt Sensitivität. Die in Abschnitt~\ref{sec:samplingrate}
+aus der Literatur abgeleitete Empfehlung von $20$--$50$\,Hz wird
+dadurch mit eigenen Messungen gestützt; für das batteriebetriebene
+Zielsystem ist $20$\,Hz ein energetisch attraktiver Arbeitspunkt.
+
+\textbf{Viertens ist Transfer Learning in allen Konfigurationen
+wirksam.} Das Fine-Tuning hebt die Sensitivität an der Taille von
+$42{,}2\,\%$ auf $92{,}2\,\%$ und am Knöchel von $34{,}8\,\%$ auf
+$80{,}1\,\%$, ohne die Spezifität zu beeinträchtigen (Knöchel:
+$92{,}2\,\%$ auf $94{,}7\,\%$). Gegenüber einem kürzeren Training mit
+20~Epochen (Sensitivität $77{,}3\,\%$, Spezifität $80{,}7\,\%$)
+verbessert die Verlängerung auf 60~Epochen beide Kennzahlen deutlich,
+was die zuvor beobachtete, noch fallende Validierungsverlustkurve
+bestätigt.
+
+\textbf{Konsequenz für das Projekt.} Da der Leistungsabfall
+überwiegend aus dem Datensatzwechsel und nicht aus der Sensorposition
+resultiert, ist zu erwarten, dass \emph{jedes} ausschließlich auf
+öffentlichen Daten trainierte Modell auf der Zielhardware
+(ESP32-C6 mit MPU-6050) einen vergleichbaren Einbruch zeigt --
+unabhängig davon, wie nah die Trainingsposition der Sohle kommt. Die
+Erhebung eines eigenen Pilotdatensatzes mit der tatsächlichen
+Zielhardware ist damit nicht nur wünschenswert, sondern für ein
+belastbares System notwendig. Zugleich zeigen die Ergebnisse, dass
+bereits eine vergleichsweise kleine Menge domänenspezifischer Daten
+ausreicht, um den größten Teil des Rückstands aufzuholen. Positiv
+für das Vorhaben ist ferner, dass der reine Positionseffekt
+(Taille gegenüber Knöchel) mit $7$ bis $12$~Prozentpunkten
+vergleichsweise gering ausfällt, was die Machbarkeit der
+fußnahen Anbringung stützt.
 
 \section{Nächste Schritte}
 \label{sec:nextsteps}
 
-\subsection{Geplante Kontrollexperimente}
+\subsection{Einordnung der durchgeführten Kontrollexperimente}
 
-Zur Absicherung und Präzisierung der Ergebnisse aus
-Abschnitt~\ref{sec:crossposition} sind drei aufeinander aufbauende
-Experimente vorgesehen:
-
-\begin{enumerate}
-\item \textbf{Verlängertes Fine-Tuning.} Die Trainingskurven zeigen,
-      dass der Validierungsverlust am Ende der 20~Epochen noch
-      fällt und die Sensitivität noch steigt. Das Training wurde
-      folglich zu früh beendet. Eine Wiederholung mit 60~Epochen
-      und einer geringeren Zahl eingefrorener Schichten soll
-      klären, welcher Anteil des verbleibenden Rückstands allein
-      auf die Trainingsdauer entfällt.
-\item \textbf{Kontrollexperiment Taille.} Derselbe Transfer wird auf
-      den \emph{Taillensensor} von UMAFall angewendet. Da diese
-      Position der SisFall-Aufnahmeposition entspricht, isoliert
-      der Vergleich den Positionseffekt vom reinen
-      Datensatzwechsel: Bleibt die Leistung an der Taille hoch und
-      fällt nur am Knöchel ab, ist die Sensorposition als Ursache
-      belegt.
-\item \textbf{Abtastraten-Kontrolle.} Das SisFall-Modell wird direkt
-      bei $20$\,Hz trainiert und anschließend ohne Hochtasten auf
-      die Knöcheldaten übertragen. Die dann verbleibende Differenz
-      entspricht dem reinen Positionseffekt und erlaubt zugleich
-      eine experimentelle Überprüfung der in
-      Kapitel~\ref{ch:properties} abgeleiteten
-      Abtastratenempfehlung.
-\end{enumerate}
+Die in Abschnitt~\ref{sec:crossposition} berichteten Experimente
+wurden bereits durchgeführt und haben zwei Hypothesen widerlegt
+(Positionsdominanz, Abtastraten-Störfaktor) sowie zwei bestätigt
+(Wirksamkeit des Fine-Tunings, Eignung von $20$\,Hz). Offen bleibt,
+welcher Anteil des verbleibenden Rückstands auf die spezifischen
+Einschränkungen von UMAFall zurückgeht -- insbesondere auf die
+Beschränkung auf drei Sturztypen und das Klassenungleichgewicht
+($471$ zu $6329$ Fenster). Eine Kreuzvalidierung gegen KFall
+\cite{kfall2021}, das mit 15~Sturztypen deutlich breiter angelegt
+ist, ist hierfür vorgesehen.
 
 \subsection{Weitere Arbeitsschritte}
 
