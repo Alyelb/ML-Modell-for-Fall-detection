@@ -1308,6 +1308,27 @@ die Eingangsrate des Modells ($50$\,Hz) hochgetastet. Die Fensterung
 erfolgte analog zur SisFall-Pipeline. Insgesamt standen
 6800~Fenster von 19~Probanden zur Verfügung (471~Stürze, 6329~ADL).
 
+Ergänzend wurde derselbe Transfer auf KFall \cite{kfall2021}
+angewendet (unterer Rücken, $100$\,Hz, 32~Probanden, 15~Sturzarten,
+5075~Aufnahmen). KFall dient dabei als Gegenprobe: Da sich dieser
+Datensatz in Probandenkollektiv, Sensorhardware und Protokoll
+ebenso deutlich von SisFall unterscheidet wie UMAFall, jedoch eine
+deutlich höhere Aufnahmequalität aufweist, lässt sich unterscheiden,
+ob ein beobachteter Leistungsabfall dem Datensatzwechsel an sich oder
+den spezifischen Eigenschaften eines Datensatzes zuzuschreiben ist.
+
+Bei der Aufbereitung von KFall wurde die Zuordnung der Aufgaben-IDs
+zu den Klassen (T01--T21 = ADL, T22--T36 = Sturz) nicht aus der
+Dokumentation übernommen, sondern empirisch überprüft: Der Median der
+Spitzenbeschleunigung steigt exakt ab T22 sprunghaft an
+($1{,}84$\,g gegenüber $4{,}62$\,g), was die angenommene Grenze
+bestätigt. Bemerkenswert ist dabei eine deutliche Überlappung der
+Wertebereiche -- einzelne ADL-Aufgaben (T20: $4{,}49$\,g) erreichen
+höhere Spitzenwerte als einzelne Sturzarten (T35: $2{,}23$\,g). Dies
+belegt unmittelbar, weshalb rein schwellwertbasierte Verfahren keine
+hohe Spezifität erreichen können, und begründet den Einsatz von
+Modellen, die den gesamten zeitlichen Verlauf auswerten.
+
 Es wurden zwei Bedingungen verglichen:
 
 \begin{itemize}
@@ -1329,26 +1350,26 @@ fassen die Ergebnisse zusammen.
 
 \begin{table}[H]
 \centering
-\caption{Ergebnisse der Transferexperimente. Alle Werte auf
+\caption{Ergebnisse aller Transferexperimente. Alle Werte auf
          subjektunabhängigen Testsplits; Fine-Tuning mit 60~Epochen.}
 \label{tab:crossposition}
 \small
-\begin{tabularx}{\textwidth}{l l C{2.1cm} C{2.1cm} C{2.1cm}}
+\begin{tabularx}{\textwidth}{l l l C{1.7cm} C{1.7cm} C{1.7cm}}
 \toprule
-\textbf{Experiment} & \textbf{Bedingung} & \textbf{Sensitivität} & \textbf{Spezifität} & \textbf{Genauigkeit} \\
+\textbf{Datensatz} & \textbf{Position} & \textbf{Bedingung} & \textbf{Sensit.} & \textbf{Spezif.} & \textbf{Genauigk.} \\
 \midrule
-Referenz SisFall (Hüfte, 50\,Hz) & Test       & 98,0\,\% & 99,7\,\% & 99,6\,\% \\
+SisFall (Referenz, 50\,Hz) & Hüfte & Test       & 98,0\,\% & 99,7\,\% & 99,6\,\% \\
+SisFall (20\,Hz)           & Hüfte & Test       & 96,8\,\% & 99,3\,\% & 99,1\,\% \\
 \midrule
-UMAFall Taille (Kontrolle)       & Zero-Shot  & 42,2\,\% & 97,4\,\% & 92,6\,\% \\
-                                 & Fine-Tuned & 92,2\,\% & 97,3\,\% & 96,9\,\% \\
+KFall                      & unt.\ Rücken & Zero-Shot  & 83,5\,\% & 94,9\,\% & 91,7\,\% \\
+                           &              & Fine-Tuned & 96,4\,\% & 96,9\,\% & 96,8\,\% \\
 \midrule
-UMAFall Knöchel                  & Zero-Shot  & 34,8\,\% & 92,2\,\% & 88,5\,\% \\
-                                 & Fine-Tuned & 80,1\,\% & 94,7\,\% & 93,8\,\% \\
-\midrule
-SisFall bei 20\,Hz               & Test       & 96,8\,\% & 99,3\,\% & 99,1\,\% \\
-\midrule
-UMAFall Knöchel bei 20\,Hz       & Zero-Shot  & 34,0\,\% & 95,6\,\% & 91,6\,\% \\
-                                 & Fine-Tuned & 78,0\,\% & 95,0\,\% & 93,9\,\% \\
+UMAFall                    & Taille   & Zero-Shot  & 42,2\,\% & 97,4\,\% & 92,6\,\% \\
+                           &          & Fine-Tuned & 92,2\,\% & 97,3\,\% & 96,9\,\% \\
+UMAFall                    & Knöchel  & Zero-Shot  & 34,8\,\% & 92,2\,\% & 88,5\,\% \\
+                           &          & Fine-Tuned & 80,1\,\% & 94,7\,\% & 93,8\,\% \\
+UMAFall (20\,Hz)           & Knöchel  & Zero-Shot  & 34,0\,\% & 95,6\,\% & 91,6\,\% \\
+                           &          & Fine-Tuned & 78,0\,\% & 95,0\,\% & 93,9\,\% \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -1363,69 +1384,87 @@ UMAFall Knöchel bei 20\,Hz       & Zero-Shot  & 34,0\,\% & 95,6\,\% & 91,6\,\% 
 
 \subsection{Interpretation}
 
-Die Kontrollexperimente führen zu einem Ergebnis, das der ursprünglichen
-Arbeitshypothese teilweise widerspricht und daher besonders
-hervorzuheben ist.
+Die Kombination der Experimente erlaubt eine Aussage, die aus einem
+einzelnen Transferversuch nicht ableitbar gewesen wäre. Insbesondere
+widerlegt das KFall-Experiment die zunächst naheliegende Vermutung,
+der Datensatzwechsel als solcher verursache den Leistungsabfall.
 
-\textbf{Erstens dominiert nicht die Sensorposition, sondern der
-Datensatzwechsel.} Der Taillensensor von UMAFall entspricht der
-Aufnahmeposition von SisFall. Wäre die Position die maßgebliche
-Ursache des Leistungsabfalls, müsste die Sensitivität dort nahezu
-erhalten bleiben. Tatsächlich fällt sie jedoch bereits an der Taille
-von $98{,}0\,\%$ auf $42{,}2\,\%$. Der Anteil, der zusätzlich auf den
-Wechsel von der Taille zum Knöchel entfällt, beträgt lediglich
-weitere $7{,}4$~Prozentpunkte (auf $34{,}8\,\%$). Die
-Domänenlücke ist somit zu etwa $55{,}8$~Prozentpunkten dem
-Datensatzwechsel (abweichende Sensorhardware, Aufnahmeprotokoll,
-Probandenkollektiv und Sturztypen) und nur zu rund
-$7$~Prozentpunkten der Sensorposition zuzuschreiben. Auch nach dem
-Fine-Tuning bleibt der reine Positionsanteil mit
-$92{,}2\,\%$ gegenüber $80{,}1\,\%$ moderat.
+\textbf{Erstens gelingt der Transfer zwischen qualitativ hochwertigen
+Datensätzen gut.} Auf KFall erreicht das unveränderte SisFall-Modell
+ohne jede Anpassung eine Sensitivität von $83{,}5\,\%$ bei einer
+Spezifität von $94{,}9\,\%$ -- und das, obwohl sich Probandenkollektiv
+(Südkorea statt Kolumbien), Sensorhardware (Xsens MTw~Awinda statt
+ADXL345/ITG3200) und Aufnahmeprotokoll vollständig unterscheiden. Ein
+Datensatzwechsel führt folglich \emph{nicht} zwangsläufig zu einem
+Einbruch.
 
-\textbf{Zweitens ist die Abtastrate als Störfaktor auszuschließen.}
-Die Vermutung, das notwendige Hochtasten der UMAFall-Daten von
-$20$\,Hz auf $50$\,Hz trage wesentlich zum Leistungsabfall bei,
-bestätigt sich nicht: Wird das Modell direkt bei $20$\,Hz trainiert
-und ohne Hochtasten übertragen, ändert sich die Zero-Shot-Sensitivität
-nur von $34{,}8\,\%$ auf $34{,}0\,\%$. Die Abtastrate erklärt den
-Effekt folglich nicht.
+\textbf{Zweitens ist der Einbruch bei UMAFall auf Eigenschaften dieses
+Datensatzes zurückzuführen.} Da der Transfer nach KFall gelingt, muss
+die Ursache in den spezifischen Merkmalen von UMAFall liegen. Als
+maßgeblich ist die native Abtastrate von $20$\,Hz anzusehen. Der
+Vergleich der beiden $20$-Hz-Bedingungen ist hier aufschlussreich:
+Ein aus $200$\,Hz auf $20$\,Hz \emph{heruntergetastetes} Signal
+(SisFall) liefert weiterhin $96{,}8\,\%$ Sensitivität, während ein
+\emph{nativ} mit $20$\,Hz aufgezeichnetes Signal (UMAFall) auf
+$34{,}0\,\%$ fällt. Der Unterschied ist physikalisch erklärbar: Beim
+Heruntertasten wird das Signal zuvor tiefpassgefiltert, sodass die
+Einhüllende des Aufprallereignisses erhalten bleibt. Bei nativer
+Aufzeichnung mit $20$\,Hz entfallen auf die typischerweise
+$50$--$100$\,ms dauernde Aufprallphase hingegen nur ein bis zwei
+Abtastwerte, sodass der Impact-Peak häufig gar nicht erfasst oder
+durch Aliasing verfälscht wird. Hinzu kommt, dass UMAFall lediglich
+drei Sturzarten umfasst (KFall: 15), was die Musterviel\-falt im
+Zielbereich zusätzlich einschränkt.
 
-\textbf{Drittens bestätigt das Experiment die Abtastratenempfehlung aus
-Kapitel~\ref{ch:properties} empirisch.} Das ausschließlich auf
-SisFall trainierte Modell erreicht bei $20$\,Hz eine Sensitivität von
-$96{,}8\,\%$ und eine Spezifität von $99{,}3\,\%$ gegenüber
-$98{,}0\,\%$ bzw.\ $99{,}7\,\%$ bei $50$\,Hz. Eine Reduktion der
-Abtastrate um $60\,\%$ kostet somit lediglich rund einen
-Prozentpunkt Sensitivität. Die in Abschnitt~\ref{sec:samplingrate}
-aus der Literatur abgeleitete Empfehlung von $20$--$50$\,Hz wird
-dadurch mit eigenen Messungen gestützt; für das batteriebetriebene
-Zielsystem ist $20$\,Hz ein energetisch attraktiver Arbeitspunkt.
+\textbf{Drittens ist der reine Positionseffekt moderat.} Innerhalb
+von UMAFall, also bei identischer Hardware und identischem Protokoll,
+kostet der Wechsel von der Taille zum Knöchel im Zero-Shot-Fall
+$7{,}4$~Prozentpunkte ($42{,}2\,\%$ auf $34{,}8\,\%$) und nach dem
+Fine-Tuning $12{,}1$~Prozentpunkte ($92{,}2\,\%$ auf $80{,}1\,\%$).
+Die Sensorposition ist damit ein realer, aber nicht der dominierende
+Faktor. Für das Vorhaben ist dies ein günstiger Befund, da er die
+grundsätzliche Machbarkeit der fußnahen Anbringung stützt.
 
-\textbf{Viertens ist Transfer Learning in allen Konfigurationen
-wirksam.} Das Fine-Tuning hebt die Sensitivität an der Taille von
-$42{,}2\,\%$ auf $92{,}2\,\%$ und am Knöchel von $34{,}8\,\%$ auf
-$80{,}1\,\%$, ohne die Spezifität zu beeinträchtigen (Knöchel:
-$92{,}2\,\%$ auf $94{,}7\,\%$). Gegenüber einem kürzeren Training mit
-20~Epochen (Sensitivität $77{,}3\,\%$, Spezifität $80{,}7\,\%$)
-verbessert die Verlängerung auf 60~Epochen beide Kennzahlen deutlich,
-was die zuvor beobachtete, noch fallende Validierungsverlustkurve
-bestätigt.
+\textbf{Viertens bestätigt sich die Abtastratenempfehlung aus
+Kapitel~\ref{ch:properties}, jedoch mit einer wichtigen Präzisierung.}
+Eine Reduktion von $50$\,Hz auf $20$\,Hz kostet bei korrektem
+Heruntertasten lediglich rund einen Prozentpunkt Sensitivität
+($98{,}0\,\%$ auf $96{,}8\,\%$). Die Empfehlung gilt jedoch
+\emph{nur} für gefiltertes Heruntertasten, nicht für eine native
+Erfassung mit $20$\,Hz.
 
-\textbf{Konsequenz für das Projekt.} Da der Leistungsabfall
-überwiegend aus dem Datensatzwechsel und nicht aus der Sensorposition
-resultiert, ist zu erwarten, dass \emph{jedes} ausschließlich auf
-öffentlichen Daten trainierte Modell auf der Zielhardware
-(ESP32-C6 mit MPU-6050) einen vergleichbaren Einbruch zeigt --
-unabhängig davon, wie nah die Trainingsposition der Sohle kommt. Die
-Erhebung eines eigenen Pilotdatensatzes mit der tatsächlichen
-Zielhardware ist damit nicht nur wünschenswert, sondern für ein
-belastbares System notwendig. Zugleich zeigen die Ergebnisse, dass
-bereits eine vergleichsweise kleine Menge domänenspezifischer Daten
-ausreicht, um den größten Teil des Rückstands aufzuholen. Positiv
-für das Vorhaben ist ferner, dass der reine Positionseffekt
-(Taille gegenüber Knöchel) mit $7$ bis $12$~Prozentpunkten
-vergleichsweise gering ausfällt, was die Machbarkeit der
-fußnahen Anbringung stützt.
+\textbf{Fünftens ist Transfer Learning in allen Konfigurationen
+wirksam}, wobei der erforderliche Umfang mit der Ausgangsqualität
+skaliert: Auf KFall genügt eine Verbesserung um $12{,}9$~Prozentpunkte
+($83{,}5\,\%$ auf $96{,}4\,\%$), auf den UMAFall-Knöcheldaten sind es
+$45{,}3$~Prozentpunkte ($34{,}8\,\%$ auf $80{,}1\,\%$). In keiner
+Konfiguration verschlechterte sich dabei die Spezifität.
+
+\subsection{Konsequenzen für den Prototyp}
+\label{sec:konsequenzen}
+
+Aus den Experimenten ergeben sich zwei unmittelbar umsetzbare
+Vorgaben für die Firmware des ESP32-C6.
+
+\textbf{Erfassung mit hoher Rate und anschließendes Heruntertasten.}
+Der Vergleich der beiden $20$-Hz-Bedingungen zeigt, dass die
+\emph{Art} der Ratenreduktion entscheidend ist. Der MPU-6050 ist
+daher mit einer Ausgangsdatenrate von mindestens $100$\,Hz zu
+betreiben; das integrierte digitale Tiefpassfilter (DLPF) ist zu
+aktivieren, und die Reduktion auf die Modelleingangsrate
+($20$--$50$\,Hz) erfolgt anschließend softwareseitig. Eine direkte
+Konfiguration des Sensors auf $20$\,Hz ist zu vermeiden, da sie
+denselben Informationsverlust verursachen würde, der bei UMAFall
+beobachtet wurde.
+
+\textbf{Erhebung eines Pilotdatensatzes bleibt erforderlich.} Zwar
+gelingt der Transfer zwischen hochwertigen Datensätzen besser als
+zunächst angenommen, doch verbleibt auch im günstigsten Fall (KFall)
+ein Rückstand von $14{,}5$~Prozentpunkten gegenüber der Referenz, der
+erst durch Fine-Tuning geschlossen wird. Da die Zielhardware
+zusätzlich eine gegenüber allen betrachteten Datensätzen abweichende
+Sensorposition verwendet, ist eine Anpassung an domänenspezifische
+Daten weiterhin vorzusehen.
 
 \section{Nächste Schritte}
 \label{sec:nextsteps}
