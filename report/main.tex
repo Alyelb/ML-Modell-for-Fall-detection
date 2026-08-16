@@ -1370,12 +1370,9 @@ UMAFall                    & Knöchel  & Zero-Shot  & 34,8\,\% & 92,2\,\% & 88,5
                            &          & Fine-Tuned & 80,1\,\% & 94,7\,\% & 93,8\,\% \\
 UMAFall (20\,Hz)           & Knöchel  & Zero-Shot  & 34,0\,\% & 95,6\,\% & 91,6\,\% \\
                            &          & Fine-Tuned & 78,0\,\% & 95,0\,\% & 93,9\,\% \\
-<<<<<<< HEAD
-=======
 \midrule
 FallAllD                   & Taille   & Zero-Shot  & 13,6\,\% & 98,8\,\% & 97,5\,\% \\
                            &          & Fine-Tuned & 84,6\,\% & 98,7\,\% & 98,5\,\% \\
->>>>>>> b25c8ba4 (Add FallAllD transfer results + clipping experiment to Kapitel 5)
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -1399,7 +1396,7 @@ ausschließlich der Taillensensor (Device~3) verwendet, da diese
 Position der Hüftposition von SisFall am nächsten kommt. Die
 Rohdaten liegen als separate Dateien für Beschleunigung und
 Drehrate vor (LSM9DS1-Sensor, Umrechnung: $\text{ACC} = \text{raw}
-\times 0{,}000244$\,g, $\text{GYR} = \text{raw} \times 0{,}07$\,°/s).
+\times 0{,}000244$\,g, $\text{GYR} = \text{raw} \times 0{,}07$\,${}^\circ$/s).
 
 Verglichen mit den vorangegangenen Transferversuchen liefert
 FallAllD ein überraschendes Ergebnis: Obwohl die Abtastrate
@@ -1487,41 +1484,6 @@ FallAllD & 238 & $\pm\;\;8$\,g & LSM9DS1   & 13,6\,\% & 84,6\,\% \\
 
 \subsection{Interpretation}
 
-<<<<<<< HEAD
-Die Kombination der Experimente erlaubt eine Aussage, die aus einem
-einzelnen Transferversuch nicht ableitbar gewesen wäre. Insbesondere
-widerlegt das KFall-Experiment die zunächst naheliegende Vermutung,
-der Datensatzwechsel als solcher verursache den Leistungsabfall.
-
-\textbf{Erstens gelingt der Transfer zwischen qualitativ hochwertigen
-Datensätzen gut.} Auf KFall erreicht das unveränderte SisFall-Modell
-ohne jede Anpassung eine Sensitivität von $83{,}5\,\%$ bei einer
-Spezifität von $94{,}9\,\%$ -- und das, obwohl sich Probandenkollektiv
-(Südkorea statt Kolumbien), Sensorhardware (Xsens MTw~Awinda statt
-ADXL345/ITG3200) und Aufnahmeprotokoll vollständig unterscheiden. Ein
-Datensatzwechsel führt folglich \emph{nicht} zwangsläufig zu einem
-Einbruch.
-
-\textbf{Zweitens ist der Einbruch bei UMAFall auf Eigenschaften dieses
-Datensatzes zurückzuführen.} Da der Transfer nach KFall gelingt, muss
-die Ursache in den spezifischen Merkmalen von UMAFall liegen. Als
-maßgeblich ist die native Abtastrate von $20$\,Hz anzusehen. Der
-Vergleich der beiden $20$-Hz-Bedingungen ist hier aufschlussreich:
-Ein aus $200$\,Hz auf $20$\,Hz \emph{heruntergetastetes} Signal
-(SisFall) liefert weiterhin $96{,}8\,\%$ Sensitivität, während ein
-\emph{nativ} mit $20$\,Hz aufgezeichnetes Signal (UMAFall) auf
-$34{,}0\,\%$ fällt. Der Unterschied ist physikalisch erklärbar: Beim
-Heruntertasten wird das Signal zuvor tiefpassgefiltert, sodass die
-Einhüllende des Aufprallereignisses erhalten bleibt. Bei nativer
-Aufzeichnung mit $20$\,Hz entfallen auf die typischerweise
-$50$--$100$\,ms dauernde Aufprallphase hingegen nur ein bis zwei
-Abtastwerte, sodass der Impact-Peak häufig gar nicht erfasst oder
-durch Aliasing verfälscht wird. Hinzu kommt, dass UMAFall lediglich
-drei Sturzarten umfasst (KFall: 15), was die Musterviel\-falt im
-Zielbereich zusätzlich einschränkt.
-
-\textbf{Drittens ist der reine Positionseffekt moderat.} Innerhalb
-=======
 Die Kombination der Experimente -- einschließlich des FallAllD-Versuchs
 und des zugehörigen Clipping-Kontrollexperiments -- erlaubt eine
 differenziertere Aussage, als sie aus einem einzelnen Transferversuch
@@ -1557,7 +1519,6 @@ Heruntertasten lediglich rund einen Prozentpunkt Sensitivität
 Erfassung mit $20$\,Hz.
 
 \textbf{Viertens ist der reine Positionseffekt moderat.} Innerhalb
->>>>>>> b25c8ba4 (Add FallAllD transfer results + clipping experiment to Kapitel 5)
 von UMAFall, also bei identischer Hardware und identischem Protokoll,
 kostet der Wechsel von der Taille zum Knöchel im Zero-Shot-Fall
 $7{,}4$~Prozentpunkte ($42{,}2\,\%$ auf $34{,}8\,\%$) und nach dem
@@ -1566,27 +1527,11 @@ Die Sensorposition ist damit ein realer, aber nicht der dominierende
 Faktor. Für das Vorhaben ist dies ein günstiger Befund, da er die
 grundsätzliche Machbarkeit der fußnahen Anbringung stützt.
 
-<<<<<<< HEAD
-\textbf{Viertens bestätigt sich die Abtastratenempfehlung aus
-Kapitel~\ref{ch:properties}, jedoch mit einer wichtigen Präzisierung.}
-Eine Reduktion von $50$\,Hz auf $20$\,Hz kostet bei korrektem
-Heruntertasten lediglich rund einen Prozentpunkt Sensitivität
-($98{,}0\,\%$ auf $96{,}8\,\%$). Die Empfehlung gilt jedoch
-\emph{nur} für gefiltertes Heruntertasten, nicht für eine native
-Erfassung mit $20$\,Hz.
-
-\textbf{Fünftens ist Transfer Learning in allen Konfigurationen
-wirksam}, wobei der erforderliche Umfang mit der Ausgangsqualität
-skaliert: Auf KFall genügt eine Verbesserung um $12{,}9$~Prozentpunkte
-($83{,}5\,\%$ auf $96{,}4\,\%$), auf den UMAFall-Knöcheldaten sind es
-$45{,}3$~Prozentpunkte ($34{,}8\,\%$ auf $80{,}1\,\%$). In keiner
-=======
 \textbf{Fünftens ist Transfer Learning in allen Konfigurationen
 wirksam}, wobei der erforderliche Umfang mit der Ausgangsqualität
 skaliert: Auf KFall genügt eine Verbesserung um $12{,}9$~Prozentpunkte
 ($83{,}5\,\%$ auf $96{,}4\,\%$), auf FallAllD sind es
 $71{,}0$~Prozentpunkte ($13{,}6\,\%$ auf $84{,}6\,\%$). In keiner
->>>>>>> b25c8ba4 (Add FallAllD transfer results + clipping experiment to Kapitel 5)
 Konfiguration verschlechterte sich dabei die Spezifität.
 
 \subsection{Konsequenzen für den Prototyp}
@@ -1606,16 +1551,6 @@ Konfiguration des Sensors auf $20$\,Hz ist zu vermeiden, da sie
 denselben Informationsverlust verursachen würde, der bei UMAFall
 beobachtet wurde.
 
-<<<<<<< HEAD
-\textbf{Erhebung eines Pilotdatensatzes bleibt erforderlich.} Zwar
-gelingt der Transfer zwischen hochwertigen Datensätzen besser als
-zunächst angenommen, doch verbleibt auch im günstigsten Fall (KFall)
-ein Rückstand von $14{,}5$~Prozentpunkten gegenüber der Referenz, der
-erst durch Fine-Tuning geschlossen wird. Da die Zielhardware
-zusätzlich eine gegenüber allen betrachteten Datensätzen abweichende
-Sensorposition verwendet, ist eine Anpassung an domänenspezifische
-Daten weiterhin vorzusehen.
-=======
 \textbf{Erhebung eines Pilotdatensatzes ist zwingend erforderlich.}
 Das FallAllD-Experiment verdeutlicht, dass selbst bei idealer
 Abtastrate und vergleichbarer Sensorposition ein Hardwarewechsel
@@ -1635,27 +1570,12 @@ sollte dennoch auf $\pm 16$\,g konfiguriert werden, um
 Headroom für extreme Stürze zu gewährleisten und die
 Signalcharakteristik der SisFall-Trainingsdaten bestmöglich zu
 approximieren.
->>>>>>> b25c8ba4 (Add FallAllD transfer results + clipping experiment to Kapitel 5)
 
 \section{Nächste Schritte}
 \label{sec:nextsteps}
 
 \subsection{Einordnung der durchgeführten Kontrollexperimente}
 
-<<<<<<< HEAD
-Die in Abschnitt~\ref{sec:crossposition} berichteten Experimente
-wurden bereits durchgeführt und haben zwei Hypothesen widerlegt
-(Positionsdominanz, Abtastraten-Störfaktor) sowie zwei bestätigt
-(Wirksamkeit des Fine-Tunings, Eignung von $20$\,Hz). Offen bleibt,
-welcher Anteil des verbleibenden Rückstands auf die spezifischen
-Einschränkungen von UMAFall zurückgeht -- insbesondere auf die
-Beschränkung auf drei Sturztypen und das Klassenungleichgewicht
-($471$ zu $6329$ Fenster). Eine Kreuzvalidierung gegen KFall
-\cite{kfall2021}, das mit 15~Sturztypen deutlich breiter angelegt
-ist, ist hierfür vorgesehen.
-
-\subsection{Weitere Arbeitsschritte}
-=======
 Die in den Abschnitten~\ref{sec:crossposition}
 bis~\ref{sec:crossfallalld} berichteten Experimente umfassen drei
 externe Datensätze (KFall, UMAFall, FallAllD) sowie ein
@@ -1667,7 +1587,6 @@ und die dominierende Rolle sensorspezifischer Signalcharakteristiken
 beim Domänentransfer.
 
 \subsection{Verbleibende Arbeitsschritte}
->>>>>>> b25c8ba4 (Add FallAllD transfer results + clipping experiment to Kapitel 5)
 
 Die folgenden Arbeitsschritte sind für den verbleibenden
 Projektzeitraum geplant:
