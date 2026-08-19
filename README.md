@@ -2,20 +2,18 @@
 
 > **[📄 Read the Full Report (PDF)](report/main.pdf)**
 
-**Studienprojekt 2** — TH Mittelhessen, Fachbereich 12 (Elektro- und Informationstechnik)
+**Studienprojekt 2**  TH Mittelhessen, Fachbereich 12 (Elektro- und Informationstechnik)
 
 | | |
 |---|---|
-| **Author** | Aly Elbermawy (Mat.-Nr. 5335848) |
-| **Supervisor** | Prof. Dr. Sergej Kovalev |
-| **Industry Partner** | TrackTech GmbH / Clever-Sole |
+| **Author** | Aly Elbermawy
 | **Semester** | SS 2026 |
 
 ---
 
 ## Project Goal
 
-Develop a TinyML pipeline for **real-time fall detection** using a 6-axis IMU embedded in a **shoe insole** ("Clever-Sole"), targeting elderly and dementia patients. The system runs on an **ESP32-C6 microcontroller** with an external **MPU-6050** sensor.
+Develop a TinyML pipeline for **real-time fall detection** using a 6-axis IMU embedded in a **shoe insole**, targeting elderly and dementia patients. The system runs on an **ESP32-C6 microcontroller** with an external **MPU-6050** sensor.
 
 ---
 
