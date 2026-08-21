@@ -1630,6 +1630,133 @@ alle drei Strategien verwendet wurde. Für den hier angestellten
 Vergleich ist dies unerheblich, da alle drei Strategien auf demselben
 Testsatz und mit identischen Hyperparametern bewertet wurden.
 
+\subsection{Zeitliche Plausibilisierung durch N-von-M-Voting}
+\label{sec:voting}
+
+Der Falsch-Positiv-Test (Abschnitt~\ref{sec:fptest}) zeigt, dass eine
+Entscheidung auf Basis eines einzelnen Fensters für den praktischen
+Einsatz ungeeignet ist. Naheliegend ist daher eine zeitliche
+Plausibilisierung: Ein Alarm wird erst ausgelöst, wenn innerhalb der
+letzten $M$ Entscheidungen mindestens $N$ positiv ausfallen. Die
+zugrundeliegende Annahme lautet, dass ein Sturz aufgrund seiner Dauer
+mehrere aufeinanderfolgende positive Fenster erzeugt, ein einzelner
+Fersenauftritt hingegen nur ein isoliertes.
+
+\subsubsection{Einfluss der Fensterschrittweite}
+
+Ein erster Versuch mit der bislang verwendeten Schrittweite von
+$1{,}0$\,s ($50\,\%$ Überlappung) ließ die Sensitivität bereits bei
+der Regel \emph{3-von-3} auf null fallen. Die Ursache liegt in der
+Fensterung selbst: Bei einer Aufprallphase von $50$--$100$\,ms und
+einer Schrittweite von $1{,}0$\,s liegt das Aufprallereignis in nur
+einem einzigen Fenster. Aufeinanderfolgende positive Fenster können
+konstruktionsbedingt gar nicht entstehen, sodass jede Regel mit
+$N \geq 2$ zwangsläufig scheitern muss.
+
+Die Schrittweite wurde daher auf $0{,}2$\,s ($90\,\%$ Überlappung)
+reduziert. Das Aufprallereignis erscheint dann in bis zu zehn
+aufeinanderfolgenden Fenstern, wobei seine relative Position innerhalb
+des Fensters schrittweise wandert. Da das Modell auf
+impact-zentrierten Fenstern trainiert wurde, reagiert es am
+deutlichsten, wenn der Aufprall nahe der Fenstermitte liegt.
+
+\subsubsection{Ergebnis}
+
+Tabelle~\ref{tab:voting} stellt die Regeln für das unveränderte
+SisFall-Modell und für das auf Knöcheldaten feinabgestimmte Modell
+gegenüber (Entscheidungsschwelle jeweils $0{,}9$, subjektunabhängiger
+Testsatz).
+
+\begin{table}[H]
+\centering
+\caption{N-von-M-Voting bei $0{,}2$\,s Schrittweite,
+         Entscheidungsschwelle $0{,}9$. Se bezeichnet den Anteil der
+         Sturzaufzeichnungen, in denen mindestens einmal Alarm
+         ausgelöst wurde; FP/Std die Fehlalarme pro Stunde
+         ADL-Aufzeichnung.}
+\label{tab:voting}
+\small
+\begin{tabularx}{\textwidth}{l C{1.6cm} C{1.7cm} C{1.6cm} C{1.7cm}}
+\toprule
+& \multicolumn{2}{c}{\textbf{Basismodell}} & \multicolumn{2}{c}{\textbf{Feinabgestimmt}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+\textbf{Regel} & \textbf{Se} & \textbf{FP/Std} & \textbf{Se} & \textbf{FP/Std} \\
+\midrule
+1-von-1  & 40,4\,\% & 212,4 & 100,0\,\% & 280,8 \\
+2-von-3  & 29,8\,\% & 100,0 &  97,9\,\% & 124,6 \\
+3-von-5  & 17,0\,\% &  63,2 &  93,6\,\% &  73,7 \\
+\textbf{5-von-7} & \textbf{8,5\,\%} & \textbf{29,8} & \textbf{83,0\,\%} & \textbf{21,1} \\
+7-von-10 &  6,4\,\% &  10,5 &  68,1\,\% &  10,5 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Für das feinabgestimmte Modell reduziert die Regel \emph{5-von-7} die
+Fehlalarmrate von $1192$ auf $21{,}1$ pro Stunde -- eine Verringerung
+um $98\,\%$ -- bei einem Rückgang der Sensitivität von $100\,\%$ auf
+$83{,}0\,\%$. Dies stellt für den vorgesehenen Einsatzzweck einen
+vertretbaren Kompromiss dar.
+
+\subsubsection{Voting ersetzt keine Domänenanpassung}
+
+Der Vergleich beider Modellspalten in Tabelle~\ref{tab:voting} führt
+zu einem Befund, der über die reine Parameterwahl hinausgeht. Beim
+Übergang von \emph{1-von-1} zu \emph{5-von-7} verliert das
+Basismodell $78\,\%$ seiner Sensitivität ($40{,}4\,\%$ auf
+$8{,}5\,\%$), das feinabgestimmte Modell hingegen nur $17\,\%$
+($100\,\%$ auf $83{,}0\,\%$).
+
+Die Erklärung liegt in der zeitlichen Struktur der Ausgaben. Ein
+nicht angepasstes Modell erzeugt auf fremden Daten \emph{vereinzelte},
+zeitlich unzusammenhängende Positivmeldungen; diese werden durch die
+Voting-Regel systematisch verworfen. Ein domänenangepasstes Modell
+erzeugt dagegen einen \emph{zusammenhängenden} Block positiver
+Fenster um das Aufprallereignis, der die Regel zuverlässig passiert.
+
+Die zeitliche Plausibilisierung ist damit kein Ersatz für die
+Domänenanpassung, sondern setzt diese voraus. Für die Firmware ergibt
+sich daraus eine klare Reihenfolge: zuerst Fine-Tuning auf
+Fußdaten, danach Voting zur Unterdrückung der verbleibenden
+Fehlalarme.
+
+\subsection{Hard-Negative-Training}
+\label{sec:hardneg}
+
+Da die Fehlalarme überwiegend bei Aktivitäten mit wiederholtem
+Bodenkontakt auftreten, lag die Vermutung nahe, diese Fenster im
+Training gezielt höher zu gewichten. Getestet wurde eine Gewichtung
+mit Faktor~$3{,}0$ für alle ADL-Fenster mit einer
+Spitzenbeschleunigung oberhalb von $1{,}8$\,g -- dies betraf $1401$
+Fenster beziehungsweise $32{,}9\,\%$ aller ADL-Fenster.
+
+\begin{table}[H]
+\centering
+\caption{Wirkung der Hard-Negative-Gewichtung
+         (Regel 2-von-3, Schwelle $0{,}9$).}
+\label{tab:hardneg}
+\small
+\begin{tabularx}{0.85\textwidth}{X C{2.2cm} C{2.2cm}}
+\toprule
+\textbf{Variante} & \textbf{Sensit.} & \textbf{FP/Std} \\
+\midrule
+Basismodell (SisFall, ohne Anpassung) &  6,4\,\% & 10,4 \\
+Fine-Tuning ohne Gewichtung           & 72,3\,\% & 13,9 \\
+Fine-Tuning mit Hard Negatives        & 63,8\,\% & 13,9 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Die Gewichtung erzielte nicht die erhoffte Wirkung: Die
+Fehlalarmrate blieb unverändert, während die Sensitivität um
+$8{,}5$~Prozentpunkte zurückging. Der Ansatz wird daher nicht
+weiterverfolgt.
+
+Aufschlussreich ist gleichwohl der Vergleich der ersten beiden
+Zeilen: Das schlichte Fine-Tuning hebt die Sensitivität von
+$6{,}4\,\%$ auf $72{,}3\,\%$. Die Domänenanpassung selbst ist damit
+um ein Vielfaches wirksamer als jede der hier untersuchten
+Zusatzmaßnahmen.
+
 \subsection{Interpretation}
 
 Die Kombination der Experimente -- einschließlich des FallAllD-Versuchs
@@ -1705,6 +1832,24 @@ Anpassungsschritt zeigt. Der Zwischenschritt wirkt demnach nicht als
 Leistungsverbesserung, sondern als Verallgemeinerung der gelernten
 Merkmalsrepräsentation.
 
+\textbf{Achtens ergänzen sich zeitliche Plausibilisierung und
+Domänenanpassung, ersetzen einander aber nicht.} Die
+N-von-M-Regel \emph{5-von-7} senkt die Fehlalarmrate des
+angepassten Modells um $98\,\%$ bei einem Sensitivitätsverlust von
+$17$~Prozentpunkten (Abschnitt~\ref{sec:voting}). Auf das nicht
+angepasste Modell angewendet, vernichtet dieselbe Regel jedoch
+$78\,\%$ der Sensitivität. Der Grund liegt in der zeitlichen
+Struktur der Modellausgaben: Nur ein domänenangepasstes Modell
+erzeugt um den Aufprall herum einen zusammenhängenden Block
+positiver Fenster, den die Regel passieren lässt. Für die Umsetzung
+folgt daraus eine feste Reihenfolge -- erst Anpassung, dann Voting.
+
+Ergänzend ist festzuhalten, dass eine gezielte Höhergewichtung
+impactstarker ADL-Fenster (Hard Negatives,
+Abschnitt~\ref{sec:hardneg}) keine Verbesserung erbrachte. Die
+Domänenanpassung selbst erwies sich in allen Versuchen als die mit
+Abstand wirksamste Einzelmaßnahme.
+
 \subsection{Konsequenzen für den Prototyp}
 \label{sec:konsequenzen}
 
@@ -1755,16 +1900,36 @@ Der Zwischenschritt kostet keinen zusätzlichen Aufwand bei der
 Datenerhebung, da KFall bereits vorliegt, verbessert die
 Anpassungsfähigkeit des Modells jedoch erheblich.
 
-\textbf{Mehrstufige Alarmauslösung.} Angesichts der in
-Abschnitt~\ref{sec:fptest} ermittelten Fehlalarmrate ist eine
-Einzelfensterentscheidung für den praktischen Einsatz ungeeignet. Die
-Firmware sollte einen Alarm erst auslösen, wenn mehrere
-aufeinanderfolgende Fenster positiv klassifiziert werden. Ein
-tatsächlicher Sturz erzeugt aufgrund seiner Dauer typischerweise
-mehrere positive Fenster in Folge, während ein einzelner
-Fersenauftritt nur ein einzelnes Fenster betrifft. Diese zeitliche
-Plausibilisierung ist rechnerisch praktisch kostenlos und dürfte die
-Fehlalarmrate deutlich senken.
+\textbf{Mehrstufige Alarmauslösung mit konkreten Parametern.} Aus
+Abschnitt~\ref{sec:voting} ergibt sich ein unmittelbar umsetzbarer
+Betriebspunkt für die Firmware:
+
+\begin{table}[H]
+\centering
+\caption{Firmware-Vorgaben für die Alarmlogik.}
+\label{tab:firmwarevorgabe}
+\small
+\begin{tabularx}{0.8\textwidth}{X l}
+\toprule
+\textbf{Parameter} & \textbf{Wert} \\
+\midrule
+Abtastrate des Sensors (ODR)      & $\geq 100$\,Hz, DLPF aktiv \\
+Messbereich                        & $\pm 16$\,g \\
+Modelleingang                      & $100 \times 6$ ($2$\,s @ $50$\,Hz) \\
+Inferenzintervall                  & $200$\,ms \\
+Ringpuffer für Entscheidungen      & 7 \\
+Entscheidungsschwelle              & $0{,}9$ \\
+Alarmbedingung                     & $\geq 5$ von 7 positiv \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Bei einem Inferenzintervall von $200$\,ms und einer geschätzten
+Inferenzzeit von etwa $10$\,ms ergibt sich eine Rechenlast von rund
+$5\,\%$ -- der ESP32-C6 ist damit deutlich unterfordert, sodass
+ausreichend Reserven für Funkübertragung und Energiesparmodi
+verbleiben. Die konkrete Inferenzzeit ist nach der
+Hardware-Integration zu verifizieren.
 
 \section{Nächste Schritte}
 \label{sec:nextsteps}
@@ -1772,19 +1937,24 @@ Fehlalarmrate deutlich senken.
 \subsection{Einordnung der durchgeführten Kontrollexperimente}
 
 Die in den Abschnitten~\ref{sec:crossposition}
-bis~\ref{sec:progressive} berichteten Experimente umfassen drei
+bis~\ref{sec:hardneg} berichteten Experimente umfassen drei
 externe Datensätze (KFall, UMAFall, FallAllD), ein
 Clipping-Kontrollexperiment, einen Falsch-Positiv-Test auf fußnahen
-Alltagsdaten sowie einen Vergleich dreier Transferstrategien.
+Alltagsdaten, einen Vergleich dreier Transferstrategien sowie zwei
+Versuche zur Verringerung der Fehlalarmrate.
 
-Insgesamt wurden drei Hypothesen widerlegt -- die vermutete Dominanz
-der Sensorposition, die alleinige Erklärungskraft der Abtastrate und
-der Einfluss des Messbereichs -- sowie vier bestätigt: die konsistente
-Wirksamkeit des Fine-Tunings, die dominierende Rolle
-sensorspezifischer Signalcharakteristiken beim Domänentransfer, die
-Notwendigkeit fußspezifischer Trainingsdaten zur Beherrschung der
-Fehlalarmrate und der Vorteil eines progressiven gegenüber einem
-direkten Anpassungsvorgehen.
+Insgesamt wurden fünf Hypothesen widerlegt -- die vermutete Dominanz
+der Sensorposition, die alleinige Erklärungskraft der Abtastrate, der
+Einfluss des Messbereichs, die Wirksamkeit einer
+Hard-Negative-Gewichtung sowie die Annahme, eine
+Einzelfensterentscheidung ließe sich unabhängig von der
+Fensterschrittweite plausibilisieren. Bestätigt wurden vier: die
+konsistente Wirksamkeit des Fine-Tunings, die dominierende Rolle
+sensorspezifischer Signalcharakteristiken beim Domänentransfer, der
+Vorteil eines progressiven gegenüber einem direkten
+Anpassungsvorgehen und die Wirksamkeit der zeitlichen
+Plausibilisierung -- letztere allerdings nur in Verbindung mit einem
+domänenangepassten Modell.
 
 \subsection{Verbleibende Arbeitsschritte}
 
@@ -1804,10 +1974,11 @@ Projektzeitraum geplant:
       Fine-Tuning des CNN: SisFall $\rightarrow$ KFall $\rightarrow$
       Pilotdaten, um die Domänenlücke zwischen den öffentlichen
       Datensätzen und der Zielhardware systematisch zu schließen.
-\item \textbf{Zeitliche Plausibilisierung:} Implementierung und
-      Parametrierung einer Mehrheitsentscheidung über $N$
-      aufeinanderfolgende Fenster zur Reduktion der in
-      Abschnitt~\ref{sec:fptest} ermittelten Fehlalarmrate.
+\item \textbf{Verifikation der Alarmlogik auf Zielhardware:}
+      Die in Tabelle~\ref{tab:firmwarevorgabe} festgelegten Parameter
+      der Voting-Regel sind nach der Pilotdatenerhebung auf den
+      tatsächlichen Fußdaten nachzujustieren, da sie bislang an
+      UMAFall-Knöcheldaten bestimmt wurden.
 \item \textbf{Long-Lie-Erkennung:} Implementierung einer zweiten
       Erkennungsstufe, die nach einem erkannten Sturz die
       Bewegungslosigkeit überwacht und bei anhaltender Liegeposition
