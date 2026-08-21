@@ -1482,6 +1482,154 @@ FallAllD & 238 & $\pm\;\;8$\,g & LSM9DS1   & 13,6\,\% & 84,6\,\% \\
 \end{tabularx}
 \end{table}
 
+\subsection{Falsch-Positiv-Test auf fußnahen Alltagsdaten}
+\label{sec:fptest}
+
+Alle bisherigen Transferversuche bewerten die Sensitivität, also die
+Fähigkeit, Stürze zu erkennen. Für den praktischen Einsatz ist jedoch
+die Falsch-Positiv-Rate mindestens ebenso entscheidend: Ein System,
+das bei jedem zweiten Schritt Alarm auslöst, ist unbrauchbar,
+unabhängig von seiner Sensitivität.
+
+\subsubsection{Vorbemerkung zur Smart Insole Database}
+
+Ursprünglich war für diesen Test die Smart Insole
+Database\footnote{\url{https://github.com/tg0uk/Smart_Insole_Database}}
+vorgesehen, da sie als einzige öffentliche Quelle Bewegungsdaten
+direkt aus einer Schuhsohle enthält. Die Prüfung der veröffentlichten Dateien ergab jedoch, dass
+diese entgegen der Angabe in der Dokumentation \emph{keine}
+IMU-Kanäle enthalten. Jede der 30~Dateien (fünf Probanden $\times$
+sechs Aktivitäten) umfasst ausschließlich 38~CapSense-Druckelektroden
+sowie die Bodenreaktionskräfte der Kraftmessplatte
+($F_x$, $F_y$, $F_z$). Beschleunigungs- und Drehratenkanäle fehlen
+vollständig. Der Datensatz ist damit für die vorliegende
+Fragestellung nicht verwendbar.
+
+Dies ist der vierte im Projektverlauf dokumentierte Fall, in dem eine
+Quellenangabe von den tatsächlichen Daten abweicht, und bestätigt das
+methodische Prinzip, Spezifikationen grundsätzlich gegen die
+Primärdaten zu prüfen.
+
+Als nächstbeste fußnahe Quelle wurden daher die
+UMAFall-Knöcheldaten herangezogen, beschränkt auf ADL-Aufzeichnungen.
+
+\subsubsection{Versuchsaufbau und Ergebnis}
+
+Das auf SisFall trainierte CNN wurde ohne Anpassung auf sämtliche
+ADL-Aufzeichnungen der UMAFall-Knöchelposition angewendet
+($6329$~Fenster, entsprechend rund $1{,}76$~Stunden
+Aufzeichnungszeit). Da keine Stürze enthalten sind, ist jede positive
+Klassifikation per Definition ein Fehlalarm.
+
+\begin{table}[H]
+\centering
+\caption{Falsch-Positiv-Rate nach Aktivität (Entscheidungsschwelle
+         $0{,}5$), UMAFall-Knöchelposition, ausschließlich
+         ADL-Aufzeichnungen.}
+\label{tab:fptest}
+\small
+\begin{tabularx}{0.9\textwidth}{l C{1.8cm} C{1.3cm} C{1.6cm} C{1.5cm}}
+\toprule
+\textbf{Aktivität} & \textbf{Fenster} & \textbf{FP} & \textbf{Rate} & \textbf{max. $p$} \\
+\midrule
+Joggen                  & 259 & 46 & 17,76\,\% & 1,000 \\
+Tür öffnen              & 563 & 32 &  5,68\,\% & 1,000 \\
+Gehen                   & 713 & 38 &  5,33\,\% & 1,000 \\
+Treppe abwärts          & 259 & 12 &  4,63\,\% & 1,000 \\
+Treppe aufwärts         & 255 &  8 &  3,14\,\% & 1,000 \\
+Hinlegen (Bett)         & 624 & 18 &  2,88\,\% & 1,000 \\
+Arme heben              & 567 & 13 &  2,29\,\% & 1,000 \\
+Telefonieren            & 610 & 11 &  1,80\,\% & 1,000 \\
+Sitzen/Aufstehen        & 699 & 11 &  1,57\,\% & 1,000 \\
+Hüpfen                  & 584 &  8 &  1,37\,\% & 0,996 \\
+Bücken                  & 648 &  8 &  1,23\,\% & 1,000 \\
+Klatschen               & 548 &  3 &  0,55\,\% & 0,996 \\
+\midrule
+\textbf{Gesamt}         & \textbf{6329} & \textbf{208} & \textbf{3,29\,\%} & --- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Bei einer Gesamtrate von $3{,}29\,\%$ entspricht dies hochgerechnet
+rund $118$~Fehlalarmen pro Stunde ununterbrochener Aufzeichnung. Ein
+solches System wäre im Alltag nicht einsetzbar.
+
+Aufschlussreich ist die Verteilung: Die höchsten Raten treten bei
+\emph{Joggen} ($17{,}76\,\%$), \emph{Gehen} ($5{,}33\,\%$) und
+\emph{Treppensteigen} auf -- also genau bei jenen Aktivitäten, bei
+denen der Fuß wiederholt auf den Boden aufschlägt. Der Fersenauftritt
+erzeugt am Knöchel einen kurzen, steilen Beschleunigungsimpuls, der
+dem Aufprallereignis eines Sturzes an der Hüfte formal ähnelt. Das
+Modell erkennt dieses Muster korrekt als Impact -- die Zuordnung zur
+Klasse \enquote{Sturz} ist jedoch im fußnahen Kontext falsch.
+
+Bemerkenswert ist ferner, dass die maximale Klassenwahrscheinlichkeit
+in fast allen Aktivitäten bei $1{,}000$ liegt. Das Modell ist sich
+seiner Fehlklassifikation also nicht etwa unsicher, sondern maximal
+zuversichtlich. Eine bloße Anhebung der Entscheidungsschwelle löst
+das Problem daher nicht vollständig.
+
+\subsection{Progressives Fine-Tuning}
+\label{sec:progressive}
+
+Die vorangegangenen Experimente zeigen, dass Fine-Tuning die
+Domänenlücke zuverlässig schließt. Offen bleibt, ob die
+\emph{Reihenfolge} der Anpassungsschritte eine Rolle spielt. Für den
+Einsatz in der Insole ist dies unmittelbar relevant: Sollte das
+Modell direkt von SisFall auf die Fußdaten angepasst werden, oder
+empfiehlt sich ein Zwischenschritt über einen weiteren
+Sturzdatensatz?
+
+Verglichen wurden drei Strategien auf einem \emph{identischen},
+subjektunabhängigen Testsatz der UMAFall-Knöcheldaten:
+
+\begin{table}[H]
+\centering
+\caption{Vergleich der Transferstrategien auf identischem Testsatz
+         (UMAFall, Knöchel). Alle Werte subjektunabhängig.}
+\label{tab:progressive}
+\small
+\begin{tabularx}{\textwidth}{l X C{1.6cm} C{1.6cm} C{1.6cm}}
+\toprule
+& \textbf{Strategie} & \textbf{Sensit.} & \textbf{Spezif.} & \textbf{Genauigk.} \\
+\midrule
+A & Zero-Shot (SisFall)                & 30,6\,\% & 96,0\,\% & 94,8\,\% \\
+B & Direkt: SisFall $\rightarrow$ UMAFall & 33,3\,\% & 95,2\,\% & 94,1\,\% \\
+C1 & Zwischenstand nach KFall-Stufe    & 22,2\,\% & 96,0\,\% & 94,7\,\% \\
+\textbf{C2} & \textbf{Progressiv: SisFall $\rightarrow$ KFall $\rightarrow$ UMAFall} & \textbf{75,0\,\%} & \textbf{97,8\,\%} & \textbf{97,4\,\%} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Das progressive Vorgehen übertrifft die direkte Anpassung um
+$41{,}7$~Prozentpunkte Sensitivität, bei gleichzeitig \emph{höherer}
+Spezifität ($97{,}8\,\%$ gegenüber $95{,}2\,\%$).
+
+Besonders aufschlussreich ist der Zwischenstand C1: Nach der
+KFall-Stufe allein \emph{sinkt} die Sensitivität auf den
+UMAFall-Knöcheldaten von $30{,}6\,\%$ auf $22{,}2\,\%$. Die
+Zwischenstufe verbessert die unmittelbare Leistung also nicht --
+sie verschlechtert sie sogar. Erst der darauffolgende
+Anpassungsschritt profitiert erheblich von ihr.
+
+Eine plausible Erklärung liefert die Betrachtung der gelernten
+Merkmalsrepräsentation: Ein ausschließlich auf SisFall trainiertes
+Modell kodiert Stürze in der spezifischen Signalform des
+ADXL345/ITG3200. Die KFall-Stufe konfrontiert es mit einer zweiten,
+davon abweichenden Ausprägung desselben physikalischen Ereignisses.
+Die resultierende Repräsentation ist allgemeiner und damit leichter
+an eine dritte Domäne anpassbar, auch wenn sie für keine der beiden
+Ausgangsdomänen optimal ist.
+
+\medskip
+\noindent\textit{Anmerkung:} Die Absolutwerte in
+Tabelle~\ref{tab:progressive} weichen von denen in
+Tabelle~\ref{tab:crossposition} ab, da hier ein anderer
+Datenaufteilungs-Seed und ein einheitliches Fine-Tuning-Protokoll für
+alle drei Strategien verwendet wurde. Für den hier angestellten
+Vergleich ist dies unerheblich, da alle drei Strategien auf demselben
+Testsatz und mit identischen Hyperparametern bewertet wurden.
+
 \subsection{Interpretation}
 
 Die Kombination der Experimente -- einschließlich des FallAllD-Versuchs
@@ -1534,6 +1682,29 @@ skaliert: Auf KFall genügt eine Verbesserung um $12{,}9$~Prozentpunkte
 $71{,}0$~Prozentpunkte ($13{,}6\,\%$ auf $84{,}6\,\%$). In keiner
 Konfiguration verschlechterte sich dabei die Spezifität.
 
+\textbf{Sechstens ist die Falsch-Positiv-Rate bei fußnaher Anbringung
+das kritischere Problem als die Sensitivität.} Der Test auf
+fußnahen ADL-Daten (Abschnitt~\ref{sec:fptest}) ergibt ohne Anpassung
+$3{,}29\,\%$ Fehlalarme, konzentriert auf Aktivitäten mit
+wiederholtem Bodenkontakt (Joggen: $17{,}76\,\%$, Gehen:
+$5{,}33\,\%$). Da das Modell diese Fehlklassifikationen mit maximaler
+Konfidenz ($p = 1{,}000$) trifft, greift eine reine Anhebung der
+Entscheidungsschwelle zu kurz. Erforderlich sind stattdessen
+domänenspezifische Trainingsdaten sowie ergänzende Mechanismen wie
+eine zeitliche Mehrheitsentscheidung über mehrere aufeinanderfolgende
+Fenster.
+
+\textbf{Siebtens ist die Reihenfolge der Anpassungsschritte
+entscheidend.} Das progressive Fine-Tuning
+(Abschnitt~\ref{sec:progressive}) übertrifft die direkte Anpassung um
+$41{,}7$~Prozentpunkte Sensitivität bei gleichzeitig höherer
+Spezifität. Bemerkenswert ist, dass die Zwischenstufe für sich
+genommen die Leistung \emph{verschlechtert} ($30{,}6\,\%$ auf
+$22{,}2\,\%$) und ihr Nutzen sich erst im nachfolgenden
+Anpassungsschritt zeigt. Der Zwischenschritt wirkt demnach nicht als
+Leistungsverbesserung, sondern als Verallgemeinerung der gelernten
+Merkmalsrepräsentation.
+
 \subsection{Konsequenzen für den Prototyp}
 \label{sec:konsequenzen}
 
@@ -1571,20 +1742,49 @@ Headroom für extreme Stürze zu gewährleisten und die
 Signalcharakteristik der SisFall-Trainingsdaten bestmöglich zu
 approximieren.
 
+\textbf{Trainingsstrategie: progressiv statt direkt.} Aus
+Abschnitt~\ref{sec:progressive} ergibt sich eine konkrete
+Handlungsanweisung für die Anpassung an die Zielhardware. Das Modell
+ist nicht unmittelbar von SisFall auf die Fußdaten anzupassen,
+sondern über eine Zwischenstufe:
+\[
+\text{SisFall} \;\longrightarrow\; \text{KFall} \;\longrightarrow\;
+\text{Pilotdaten (Fuß, MPU-6050)}
+\]
+Der Zwischenschritt kostet keinen zusätzlichen Aufwand bei der
+Datenerhebung, da KFall bereits vorliegt, verbessert die
+Anpassungsfähigkeit des Modells jedoch erheblich.
+
+\textbf{Mehrstufige Alarmauslösung.} Angesichts der in
+Abschnitt~\ref{sec:fptest} ermittelten Fehlalarmrate ist eine
+Einzelfensterentscheidung für den praktischen Einsatz ungeeignet. Die
+Firmware sollte einen Alarm erst auslösen, wenn mehrere
+aufeinanderfolgende Fenster positiv klassifiziert werden. Ein
+tatsächlicher Sturz erzeugt aufgrund seiner Dauer typischerweise
+mehrere positive Fenster in Folge, während ein einzelner
+Fersenauftritt nur ein einzelnes Fenster betrifft. Diese zeitliche
+Plausibilisierung ist rechnerisch praktisch kostenlos und dürfte die
+Fehlalarmrate deutlich senken.
+
 \section{Nächste Schritte}
 \label{sec:nextsteps}
 
 \subsection{Einordnung der durchgeführten Kontrollexperimente}
 
 Die in den Abschnitten~\ref{sec:crossposition}
-bis~\ref{sec:crossfallalld} berichteten Experimente umfassen drei
-externe Datensätze (KFall, UMAFall, FallAllD) sowie ein
-Clipping-Kontrollexperiment. Insgesamt wurden drei Hypothesen
-widerlegt -- die vermutete Dominanz der Sensorposition, die alleinige
-Erklärungskraft der Abtastrate und der Einfluss des Messbereichs --
-sowie zwei bestätigt: die konsistente Wirksamkeit des Fine-Tunings
-und die dominierende Rolle sensorspezifischer Signalcharakteristiken
-beim Domänentransfer.
+bis~\ref{sec:progressive} berichteten Experimente umfassen drei
+externe Datensätze (KFall, UMAFall, FallAllD), ein
+Clipping-Kontrollexperiment, einen Falsch-Positiv-Test auf fußnahen
+Alltagsdaten sowie einen Vergleich dreier Transferstrategien.
+
+Insgesamt wurden drei Hypothesen widerlegt -- die vermutete Dominanz
+der Sensorposition, die alleinige Erklärungskraft der Abtastrate und
+der Einfluss des Messbereichs -- sowie vier bestätigt: die konsistente
+Wirksamkeit des Fine-Tunings, die dominierende Rolle
+sensorspezifischer Signalcharakteristiken beim Domänentransfer, die
+Notwendigkeit fußspezifischer Trainingsdaten zur Beherrschung der
+Fehlalarmrate und der Vorteil eines progressiven gegenüber einem
+direkten Anpassungsvorgehen.
 
 \subsection{Verbleibende Arbeitsschritte}
 
@@ -1604,10 +1804,10 @@ Projektzeitraum geplant:
       Fine-Tuning des CNN: SisFall $\rightarrow$ KFall $\rightarrow$
       Pilotdaten, um die Domänenlücke zwischen den öffentlichen
       Datensätzen und der Zielhardware systematisch zu schließen.
-\item \textbf{False-Positive-Test auf Fußdaten:} Evaluierung des
-      Modells auf der Smart Insole Database, die ausschließlich
-      ADL-Aktivitäten vom Fuß enthält, um die Falsch-Positiv-Rate
-      bei fußtypischen Bewegungsmustern zu bewerten.
+\item \textbf{Zeitliche Plausibilisierung:} Implementierung und
+      Parametrierung einer Mehrheitsentscheidung über $N$
+      aufeinanderfolgende Fenster zur Reduktion der in
+      Abschnitt~\ref{sec:fptest} ermittelten Fehlalarmrate.
 \item \textbf{Long-Lie-Erkennung:} Implementierung einer zweiten
       Erkennungsstufe, die nach einem erkannten Sturz die
       Bewegungslosigkeit überwacht und bei anhaltender Liegeposition
