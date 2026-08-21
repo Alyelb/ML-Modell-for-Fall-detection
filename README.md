@@ -1,5 +1,6 @@
 # Sensor-Based Fall Detection with Machine Learning
 
+<<<<<<< HEAD
 > **[📄 Read the Full Report (PDF)](report/main.pdf)**
 
 **Studienprojekt 2**  TH Mittelhessen, Fachbereich 12 (Elektro- und Informationstechnik)
@@ -30,96 +31,118 @@ All evaluations are **subject-independent** (tested on persons not seen during t
 The int8-quantized TFLite model is **64 KB** — fits comfortably in the ESP32-C6's 4 MB flash.
 
 ---
+=======
+Master's project (Studienprojekt 2) at TH Mittelhessen — TinyML fall-detection pipeline for a shoe-insole IMU, targeting the ESP32-C6 microcontroller.
+>>>>>>> 3da57f87 (Add ESP32 firmware + update README for public repo)
 
 ## Project Structure
 
 ```
-├── report/
-│   ├── main.tex              <- Full LaTeX report (Aufgaben 1-4)
-│   └── references.bib        <- BibTeX references
-├── fall_pipeline.py           <- Threshold baseline + Random Forest
-├── cnn_pipeline.py            <- 1D-CNN + int8 TFLite export
-├── requirements.txt           <- Python dependencies
-├── .github/
-│   └── workflows/
-│       └── build-pdf.yml      <- Auto-compiles LaTeX to PDF on push
-└── README.md
+.
+├── fall_pipeline.py            # Threshold baseline + Random Forest
+├── cnn_pipeline.py             # 1D-CNN training + int8 TFLite export
+├── cross_position.py           # Transfer SisFall → UMAFall (WAIST / ANKLE)
+├── cross_dataset_kfall.py      # Transfer SisFall → KFall
+├── cross_dataset_fallalld.py   # Transfer SisFall → FallAllD
+├── experiments.py              # Batch runner for multiple experiments
+├── requirements.txt
+│
+├── report/                     # LaTeX report (auto-compiled via GitHub Actions)
+│   ├── main.tex
+│   ├── main.pdf                # ← viewable inline on GitHub
+│   └── references.bib
+│
+├── ESP32_Code/                 # Firmware for ESP32-C6 + MPU-6050
+│   └── sketch_aug21a/
+│       └── sketch_aug21a.ino
+│
+└── .github/workflows/          # CI: LaTeX → PDF on every push
+    └── build-pdf.yml
 ```
 
----
+## ML Pipeline
 
-## Progress & Methodology
+Three models, each building on the previous:
 
-### Aufgabe 1 — Sensor Axis Comparison ✅
+| Model | Type | Sensitivity | Specificity | Accuracy |
+|---|---|---|---|---|
+| Threshold (Bourke) | Rule-based baseline | 96.7% | 76.8% | 77.5% |
+| Random Forest | Classical ML (18 features) | 94.2% | 99.6% | 99.4% |
+| **1D-CNN** | **Deep Learning (raw signal)** | **98.0%** | **99.7%** | **99.6%** |
 
-Theoretical comparison of 3-, 6-, and 9-axis sensor configurations. Conclusion: **6-axis (accelerometer + gyroscope) is the optimal trade-off** — the gyroscope dramatically reduces false positives (specificity jumps from ~83% to ~96%), while the magnetometer adds marginal benefit for the short-duration fall event and introduces indoor magnetic interference.
+All evaluations are **subject-independent** (GroupKFold / GroupShuffleSplit).
 
-### Aufgabe 2 — Sensor Properties ✅
+The 1D-CNN has 45,601 parameters and exports to a **64 KB** int8 TFLite model.
 
-Analysis of five sensor properties (measurement range, sampling rate, bit resolution, noise density, gyroscope drift) and their effect on detection quality. Recommended operating point: **±16 g, 20–50 Hz, ≥12 bit, low noise density, uncorrected drift** (negligible over a 1–2 s fall).
+## Cross-Dataset Transfer Results
 
-### Aufgabe 3 — Dataset Evaluation ✅
+The trained SisFall model was evaluated on three external datasets to test generalization:
 
-Evaluation of seven open-source fall datasets (SisFall, MobiFall/MobiAct, UMAFall, KFall, FallAllD, UniMiB SHAR, WEDA-FALL). **SisFall** selected as primary dataset (6-axis, ±16 g, 200 Hz, 38 subjects). **KFall** as secondary (pre-impact annotation).
+| Dataset | Position | Native Hz | Zero-Shot Se | Fine-Tuned Se |
+|---|---|---|---|---|
+| KFall | Lower back | 100 | **83.5%** | 96.4% |
+| UMAFall | Waist | 20 | 42.2% | 92.2% |
+| UMAFall | Ankle | 20 | 34.8% | 80.1% |
+| FallAllD | Waist | 238 | 13.6% | 84.6% |
 
-### Aufgabe 4 — ML Model Development 🔄 In Progress
+**Key finding:** Zero-shot transfer success depends on sensor-specific signal characteristics, not just sampling rate or measurement range. A clipping control experiment confirmed that FallAllD's ±8g range is not the cause of transfer failure. Fine-tuning consistently recovers performance across all configurations.
 
-**Completed:**
-- SisFall data loader with ADC-to-physical-unit conversion
-- Downsampling (200 → 50 Hz) and impact-centered windowing (2 s, 50% overlap)
-- Three progressively stronger models (see results table above)
-- Feature importance analysis confirming gyroscope dominance (4 of top 5 features)
-- Int8 TFLite quantization (64 KB model ready for ESP32-C6)
+## Signal Processing Pipeline
 
-**Planned:**
-- Sampling-rate ablation study (10 / 20 / 50 Hz)
-- Cross-dataset validation (SisFall ↔ KFall)
-- ESP32-C6 + MPU-6050 hardware integration
-- Pilot foot dataset collection for domain adaptation
-- Long-Lie post-fall monitoring layer
+```
+Raw ADC → Physical units (g, °/s) → Downsample to 50 Hz
+→ 2s sliding windows (50% overlap, impact-centered for falls)
+→ Per-window z-normalization → Model
+```
 
----
+## Datasets Used
 
-## Domain Gap: Waist → Foot
+| Dataset | Subjects | Hz | Sensor Position | Role |
+|---|---|---|---|---|
+| [SisFall](https://doi.org/10.3390/s17010198) | 38 | 200 | Hip | Primary training |
+| [KFall](https://doi.org/10.3390/s21093199) | 32 | 100 | Lower back | Transfer validation |
+| [UMAFall](https://doi.org/10.3390/s17010120) | 19 | 20 | Multi-position | Position transfer |
+| [FallAllD](https://doi.org/10.1109/JSEN.2019.2966342) | 15 | 238 | Multi-position | Sensor transfer |
 
-No public foot-mounted IMU fall-detection dataset exists. SisFall was recorded at the waist. The pipeline mitigates this gap through:
+Data not included — download from the respective sources and place in `data/`.
 
-1. **Rotation-invariant magnitude features** (RF) — orientation-independent
-2. **Per-window z-normalization** (CNN) — removes position-dependent offsets
-3. **Subject-independent validation** — prevents overfitting to individual movement patterns
-4. **Planned pilot foot data** — fine-tuning the CNN's last layers on self-collected insole data
+## Hardware Target
 
----
+- **MCU:** ESP32-C6 (RISC-V, 160 MHz, WiFi 6, BLE 5)
+- **IMU:** MPU-6050 via I2C (configured at ±16g, ±2000°/s, 100 Hz, DLPF enabled)
+- **Deployment:** int8 TFLite model (64 KB) on 4 MB flash
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/Alyelb/ML-Modell-for-Fall-detection.git
-cd ML-Modell-for-Fall-detection
 python -m venv venv
-venv\Scripts\activate            # Windows
+source venv/bin/activate        # Linux/Mac
+venv\Scripts\activate           # Windows
+
 pip install -r requirements.txt
 
-# Download SisFall and place in data/SisFall_dataset/
-
-python fall_pipeline.py          # Threshold + RF baseline
-python cnn_pipeline.py           # 1D-CNN + TFLite export
+python fall_pipeline.py         # Threshold + Random Forest
+python cnn_pipeline.py          # 1D-CNN + TFLite export
+python cross_dataset_kfall.py   # Transfer to KFall
+python cross_dataset_fallalld.py # Transfer to FallAllD
 ```
 
----
+## Current Status
 
-## Hardware Target
+- [x] Theoretical sensor comparison (3/6/9-axis)
+- [x] Sensor property analysis
+- [x] Dataset evaluation (7 public datasets)
+- [x] ML models: Threshold, Random Forest, 1D-CNN
+- [x] Cross-dataset transfer: KFall, UMAFall, FallAllD
+- [x] Clipping control experiment
+- [ ] ESP32-C6 firmware + MPU-6050 integration
+- [ ] Pilot foot dataset collection
+- [ ] On-device TFLite deployment
 
-| Component | Specification |
-|---|---|
-| MCU | ESP32-C6 (RISC-V, WiFi 6 + BLE) |
-| IMU | MPU-6050 (6-axis, ±16 g / ±2000 °/s) via I2C |
-| Model size | 64 KB (int8 quantized TFLite) |
-| Inference | < 50 ms per 2 s window |
-| Form factor | Shoe insole integration |
+## Report
 
----
+The full report (German) is auto-compiled on every push and viewable at [`report/main.pdf`](report/main.pdf).
 
 ## License
 
-Academic use only (Studienprojekt, TH Mittelhessen).
+Academic use only.
