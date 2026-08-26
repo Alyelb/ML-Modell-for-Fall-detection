@@ -1580,37 +1580,69 @@ Modell direkt von SisFall auf die Fußdaten angepasst werden, oder
 empfiehlt sich ein Zwischenschritt über einen weiteren
 Sturzdatensatz?
 
-Verglichen wurden drei Strategien auf einem \emph{identischen},
-subjektunabhängigen Testsatz der UMAFall-Knöcheldaten:
+Verglichen werden drei Strategien auf den UMAFall-Knöcheldaten:
 
 \begin{table}[H]
 \centering
-\caption{Vergleich der Transferstrategien auf identischem Testsatz
-         (UMAFall, Knöchel). Alle Werte subjektunabhängig.}
+\caption{Transferstrategien im Vergleich. Fünffache
+         subjektunabhängige Kreuzvalidierung; die Kennzahlen sind
+         über die aufsummierten Konfusionsmatrizen aller Falten
+         berechnet. In Klammern das 95\,\%-Konfidenzintervall
+         (Wilson).}
 \label{tab:progressive}
 \small
-\begin{tabularx}{\textwidth}{l X C{1.6cm} C{1.6cm} C{1.6cm}}
+\begin{tabularx}{\textwidth}{l X C{2.9cm} C{1.6cm}}
 \toprule
-& \textbf{Strategie} & \textbf{Sensit.} & \textbf{Spezif.} & \textbf{Genauigk.} \\
+& \textbf{Strategie} & \textbf{Sensitivität} & \textbf{Spezif.} \\
 \midrule
-A & Zero-Shot (SisFall)                & 30,6\,\% & 96,0\,\% & 94,8\,\% \\
-B & Direkt: SisFall $\rightarrow$ UMAFall & 33,3\,\% & 95,2\,\% & 94,1\,\% \\
-C1 & Zwischenstand nach KFall-Stufe    & 22,2\,\% & 96,0\,\% & 94,7\,\% \\
-\textbf{C2} & \textbf{Progressiv: SisFall $\rightarrow$ KFall $\rightarrow$ UMAFall} & \textbf{75,0\,\%} & \textbf{97,8\,\%} & \textbf{97,4\,\%} \\
+A & Zero-Shot (SisFall) & 25,5\,\% \enskip [19,3; 32,8] & 97,4\,\% \\
+B & Direkt: SisFall $\rightarrow$ UMAFall & 42,7\,\% \enskip [35,2; 50,5] & 96,7\,\% \\
+C1 & Zwischenstand nach KFall-Stufe & 17,2\,\% \enskip [12,1; 23,9] & 98,7\,\% \\
+\textbf{C2} & \textbf{Progressiv: SisFall $\rightarrow$ KFall $\rightarrow$ UMAFall} & \textbf{52,2\,\% \enskip [44,5; 59,9]} & \textbf{96,5\,\%} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection{Gepaarter Vergleich}
+
+Da alle Strategien auf denselben Falten bewertet werden, ist der
+gepaarte Vergleich der Differenzen aussagekräftiger als der Vergleich
+der Mittelwerte: Schwankungen zwischen den Falten heben sich dabei
+heraus.
+
+\begin{table}[H]
+\centering
+\caption{Differenz zwischen progressivem und direktem Vorgehen
+         innerhalb jeder Falte.}
+\label{tab:progressive_paired}
+\small
+\begin{tabularx}{0.9\textwidth}{X C{1.1cm} C{1.1cm} C{1.1cm} C{1.1cm} C{1.1cm} C{2.6cm}}
+\toprule
+& \multicolumn{5}{c}{\textbf{Falte}} & \\
+\cmidrule(lr){2-6}
+\textbf{Kennzahl} & 1 & 2 & 3 & 4 & 5 & \textbf{Mittel [95\,\%-KI]} \\
+\midrule
+Sensitivität & $+7{,}5$ & $+6{,}9$ & $+14{,}5$ & $+3{,}7$ & $+16{,}7$ & $+9{,}9$ \enskip [$+5{,}1$; $+14{,}7$] \\
+Spezifität   & $+0{,}1$ & $-0{,}7$ & $+0{,}2$ & $-0{,}5$ & $\pm 0{,}0$ & $-0{,}2$ \enskip [$-0{,}5$; $+0{,}2$] \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 Das progressive Vorgehen übertrifft die direkte Anpassung um
-$41{,}7$~Prozentpunkte Sensitivität, bei gleichzeitig \emph{höherer}
-Spezifität ($97{,}8\,\%$ gegenüber $95{,}2\,\%$).
+$9{,}9$~Prozentpunkte Sensitivität. Der Vorteil tritt in
+\emph{allen fünf} Falten auf, und das Konfidenzintervall der
+Differenz schließt den Wert null nicht ein -- der Unterschied ist
+damit statistisch gesichert. Die Spezifität bleibt dabei praktisch
+unverändert; die Differenz von $-0{,}2$~Prozentpunkten ist nicht
+signifikant.
 
-Besonders aufschlussreich ist der Zwischenstand C1: Nach der
-KFall-Stufe allein \emph{sinkt} die Sensitivität auf den
-UMAFall-Knöcheldaten von $30{,}6\,\%$ auf $22{,}2\,\%$. Die
-Zwischenstufe verbessert die unmittelbare Leistung also nicht --
-sie verschlechtert sie sogar. Erst der darauffolgende
-Anpassungsschritt profitiert erheblich von ihr.
+\subsubsection{Die Zwischenstufe verbessert nicht, sie
+verallgemeinert}
+
+Aufschlussreich ist der Zwischenstand C1: Nach der KFall-Stufe allein
+\emph{sinkt} die Sensitivität auf den UMAFall-Knöcheldaten von
+$25{,}5\,\%$ auf $17{,}2\,\%$ -- deutlich unter den Ausgangswert. Erst
+der darauffolgende Anpassungsschritt profitiert erheblich von ihr.
 
 Eine plausible Erklärung liefert die Betrachtung der gelernten
 Merkmalsrepräsentation: Ein ausschließlich auf SisFall trainiertes
@@ -1619,16 +1651,20 @@ ADXL345/ITG3200. Die KFall-Stufe konfrontiert es mit einer zweiten,
 davon abweichenden Ausprägung desselben physikalischen Ereignisses.
 Die resultierende Repräsentation ist allgemeiner und damit leichter
 an eine dritte Domäne anpassbar, auch wenn sie für keine der beiden
-Ausgangsdomänen optimal ist.
+Ausgangsdomänen optimal ist. Der Zwischenschritt wirkt demnach nicht
+als Leistungsverbesserung, sondern als Verallgemeinerung.
 
 \medskip
-\noindent\textit{Anmerkung:} Die Absolutwerte in
-Tabelle~\ref{tab:progressive} weichen von denen in
-Tabelle~\ref{tab:crossposition} ab, da hier ein anderer
-Datenaufteilungs-Seed und ein einheitliches Fine-Tuning-Protokoll für
-alle drei Strategien verwendet wurde. Für den hier angestellten
-Vergleich ist dies unerheblich, da alle drei Strategien auf demselben
-Testsatz und mit identischen Hyperparametern bewertet wurden.
+\noindent\textit{Methodische Anmerkung:} Ein früherer Durchlauf
+dieses Versuchs mit einer einzelnen Datenaufteilung ergab einen
+Vorteil von lediglich $5{,}6$~Prozentpunkten. Dessen Testsatz enthielt
+jedoch nur 36~Sturzfenster; der Unterschied entsprach zwei zusätzlich
+erkannten Fenstern, und die Konfidenzintervalle beider Strategien
+überlappten vollständig. Die hier berichteten Werte beruhen auf allen
+157~Sturzaufzeichnungen der Knöchelposition und sind entsprechend
+belastbarer. Dies verdeutlicht zugleich eine allgemeine
+Einschränkung: Bei seltenen Ereignissen liefert eine einzelne
+Aufteilung keine tragfähige Grundlage für Verfahrensvergleiche.
 
 \subsection{Zeitliche Plausibilisierung durch N-von-M-Voting}
 \label{sec:voting}
@@ -1726,36 +1762,69 @@ Da die Fehlalarme überwiegend bei Aktivitäten mit wiederholtem
 Bodenkontakt auftreten, lag die Vermutung nahe, diese Fenster im
 Training gezielt höher zu gewichten. Getestet wurde eine Gewichtung
 mit Faktor~$3{,}0$ für alle ADL-Fenster mit einer
-Spitzenbeschleunigung oberhalb von $1{,}8$\,g -- dies betraf $1401$
-Fenster beziehungsweise $32{,}9\,\%$ aller ADL-Fenster.
+Spitzenbeschleunigung oberhalb von $1{,}8$\,g.
+
+Die Auswahl trifft die erwarteten Bewegungen: Betroffen sind
+$86{,}1\,\%$ der Jogging-Fenster, $84{,}7\,\%$ der Geh-Fenster und
+$84{,}4\,\%$ der Hüpf-Fenster, hingegen kein einziges Klatsch-Fenster.
+Die Heuristik erfasst also tatsächlich Bewegungen mit
+Fersenauftritt.
 
 \begin{table}[H]
 \centering
-\caption{Wirkung der Hard-Negative-Gewichtung
-         (Regel 2-von-3, Schwelle $0{,}9$).}
+\caption{Wirkung der Hard-Negative-Gewichtung. Fünffache
+         subjektunabhängige Kreuzvalidierung, 95\,\%-Konfidenz\-intervalle
+         in Klammern.}
 \label{tab:hardneg}
 \small
-\begin{tabularx}{0.85\textwidth}{X C{2.2cm} C{2.2cm}}
+\begin{tabularx}{\textwidth}{X C{2.9cm} C{2.9cm} C{1.1cm} C{1.1cm}}
 \toprule
-\textbf{Variante} & \textbf{Sensit.} & \textbf{FP/Std} \\
+\textbf{Variante} & \textbf{Sensitivität} & \textbf{Spezifität} & \textbf{FP} & \textbf{FN} \\
 \midrule
-Basismodell (SisFall, ohne Anpassung) &  6,4\,\% & 10,4 \\
-Fine-Tuning ohne Gewichtung           & 72,3\,\% & 13,9 \\
-Fine-Tuning mit Hard Negatives        & 63,8\,\% & 13,9 \\
+Basismodell (ohne Anpassung) & 12,4\,\% \enskip [9,1; 16,6] & 97,7\,\% \enskip [97,4; 98,0] & 185 & 262 \\
+\textbf{Fine-Tuning ohne Gewichtung} & \textbf{75,2\,\% \enskip [70,1; 79,8]} & 92,9\,\% \enskip [92,4; 93,5] & 570 & \textbf{74} \\
+Fine-Tuning mit Hard Negatives & 67,6\,\% \enskip [62,1; 72,6] & \textbf{95,0\,\% \enskip [94,5; 95,5]} & \textbf{404} & 97 \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Die Gewichtung erzielte nicht die erhoffte Wirkung: Die
-Fehlalarmrate blieb unverändert, während die Sensitivität um
-$8{,}5$~Prozentpunkte zurückging. Der Ansatz wird daher nicht
-weiterverfolgt.
+Der gepaarte Vergleich über die Falten ergibt ein eindeutiges Bild:
+Die Gewichtung senkt die Sensitivität um $7{,}4$~Prozentpunkte
+(95\,\%-KI $[-10{,}4; -4{,}4]$, schlechter in allen fünf Falten) und
+hebt zugleich die Spezifität um $2{,}1$~Prozentpunkte
+(95\,\%-KI $[+1{,}3; +3{,}0]$, besser in allen fünf Falten). Beide
+Effekte sind statistisch gesichert; es handelt sich um einen echten
+Tauschhandel, nicht um Zufallsschwankung.
 
-Aufschlussreich ist gleichwohl der Vergleich der ersten beiden
-Zeilen: Das schlichte Fine-Tuning hebt die Sensitivität von
-$6{,}4\,\%$ auf $72{,}3\,\%$. Die Domänenanpassung selbst ist damit
-um ein Vielfaches wirksamer als jede der hier untersuchten
+In absoluten Zahlen: Die Gewichtung vermeidet 166~Fehlalarme, lässt
+dafür aber 23~zusätzliche Stürze unerkannt.
+
+\subsubsection{Bewertung für den Anwendungsfall}
+
+Für die vorgesehene Anwendung ist dieser Tausch nachteilig. Ein
+unerkannter Sturz kann dazu führen, dass eine hilflose Person über
+Stunden unentdeckt bleibt; ein Fehlalarm verursacht demgegenüber
+lediglich Aufwand. Hinzu kommt ein systematisches Argument: Die
+zeitliche Plausibilisierung nach Abschnitt~\ref{sec:voting} reduziert
+Fehlalarme bereits um $98\,\%$ -- für einen verpassten Sturz gibt es
+dagegen keine nachgelagerte Korrekturmöglichkeit. Fehlalarme lassen
+sich also auf einer späteren Verarbeitungsstufe abfangen,
+Detektionslücken nicht.
+
+Der Ansatz wird daher nicht weiterverfolgt. Festzuhalten bleibt
+gleichwohl der Vergleich der ersten beiden Tabellenzeilen: Das
+schlichte Fine-Tuning hebt die Sensitivität von $12{,}4\,\%$ auf
+$75{,}2\,\%$. Die Domänenanpassung selbst erweist sich damit als um
+ein Vielfaches wirksamer als jede der untersuchten
 Zusatzmaßnahmen.
+
+\medskip
+\noindent\textit{Methodische Anmerkung:} Zwei frühere Durchläufe mit
+einzelnen Datenaufteilungen ergaben \emph{gegenläufige} Ergebnisse
+(einmal $-8{,}5$, einmal $+43{,}5$~Prozentpunkte Sensitivität). Ein
+Vorzeichenwechsel dieser Größenordnung ist ein Warnsignal für
+Zufallsschwankung und war der Anlass, den Versuch kreuzvalidiert zu
+wiederholen.
 
 \subsection{Interpretation}
 
@@ -1824,12 +1893,14 @@ Fenster.
 \textbf{Siebtens ist die Reihenfolge der Anpassungsschritte
 entscheidend.} Das progressive Fine-Tuning
 (Abschnitt~\ref{sec:progressive}) übertrifft die direkte Anpassung um
-$41{,}7$~Prozentpunkte Sensitivität bei gleichzeitig höherer
-Spezifität. Bemerkenswert ist, dass die Zwischenstufe für sich
-genommen die Leistung \emph{verschlechtert} ($30{,}6\,\%$ auf
-$22{,}2\,\%$) und ihr Nutzen sich erst im nachfolgenden
-Anpassungsschritt zeigt. Der Zwischenschritt wirkt demnach nicht als
-Leistungsverbesserung, sondern als Verallgemeinerung der gelernten
+$9{,}9$~Prozentpunkte Sensitivität, ohne die Spezifität zu
+beeinträchtigen. Der Vorteil tritt in allen fünf Falten der
+Kreuzvalidierung auf und ist statistisch gesichert. Bemerkenswert
+ist, dass die Zwischenstufe für sich genommen die Leistung
+\emph{verschlechtert} ($25{,}5\,\%$ auf $17{,}2\,\%$) und ihr Nutzen
+sich erst im nachfolgenden Anpassungsschritt zeigt. Der
+Zwischenschritt wirkt demnach nicht als Leistungsverbesserung,
+sondern als Verallgemeinerung der gelernten
 Merkmalsrepräsentation.
 
 \textbf{Achtens ergänzen sich zeitliche Plausibilisierung und
@@ -1846,9 +1917,25 @@ folgt daraus eine feste Reihenfolge -- erst Anpassung, dann Voting.
 
 Ergänzend ist festzuhalten, dass eine gezielte Höhergewichtung
 impactstarker ADL-Fenster (Hard Negatives,
-Abschnitt~\ref{sec:hardneg}) keine Verbesserung erbrachte. Die
-Domänenanpassung selbst erwies sich in allen Versuchen als die mit
-Abstand wirksamste Einzelmaßnahme.
+Abschnitt~\ref{sec:hardneg}) zwar die Spezifität um
+$2{,}1$~Prozentpunkte hebt, dies jedoch mit $7{,}4$~Prozentpunkten
+Sensitivität erkauft -- für die Sturzerkennung der falsche Tausch.
+Die Domänenanpassung selbst erwies sich in allen Versuchen als die
+mit Abstand wirksamste Einzelmaßnahme.
+
+\textbf{Neuntens erfordert die Bewertung von Verfahrensunterschieden
+bei seltenen Ereignissen eine Kreuzvalidierung.} Zwei der hier
+untersuchten Fragestellungen lieferten bei einzelnen
+Datenaufteilungen irreführende Ergebnisse: Beim progressiven
+Fine-Tuning umfasste der Testsatz nur 36~Sturzfenster, sodass zwei
+zusätzlich erkannte Fenster bereits als mehrere Prozentpunkte
+erschienen; beim Hard-Negative-Versuch kehrte sich das Vorzeichen
+zwischen zwei Durchläufen um. Erst die fünffache Kreuzvalidierung
+mit gepaartem Vergleich erlaubte belastbare Aussagen. Da Stürze in
+allen betrachteten Datensätzen selten sind -- an der
+UMAFall-Knöchelposition betreffen sie nur $2{,}4\,\%$ der Fenster --,
+ist dieses Vorgehen keine methodische Kür, sondern Voraussetzung für
+tragfähige Schlussfolgerungen.
 
 \subsection{Konsequenzen für den Prototyp}
 \label{sec:konsequenzen}
@@ -1941,20 +2028,30 @@ bis~\ref{sec:hardneg} berichteten Experimente umfassen drei
 externe Datensätze (KFall, UMAFall, FallAllD), ein
 Clipping-Kontrollexperiment, einen Falsch-Positiv-Test auf fußnahen
 Alltagsdaten, einen Vergleich dreier Transferstrategien sowie zwei
-Versuche zur Verringerung der Fehlalarmrate.
+Versuche zur Verringerung der Fehlalarmrate. Die beiden zuletzt
+genannten Fragestellungen wurden fünffach kreuzvalidiert, nachdem
+sich einzelne Datenaufteilungen als nicht tragfähig erwiesen hatten.
 
-Insgesamt wurden fünf Hypothesen widerlegt -- die vermutete Dominanz
+Insgesamt wurden fünf Hypothesen widerlegt: die vermutete Dominanz
 der Sensorposition, die alleinige Erklärungskraft der Abtastrate, der
-Einfluss des Messbereichs, die Wirksamkeit einer
+Einfluss des Messbereichs, der erhoffte Nutzen einer
 Hard-Negative-Gewichtung sowie die Annahme, eine
 Einzelfensterentscheidung ließe sich unabhängig von der
-Fensterschrittweite plausibilisieren. Bestätigt wurden vier: die
-konsistente Wirksamkeit des Fine-Tunings, die dominierende Rolle
-sensorspezifischer Signalcharakteristiken beim Domänentransfer, der
-Vorteil eines progressiven gegenüber einem direkten
-Anpassungsvorgehen und die Wirksamkeit der zeitlichen
+Fensterschrittweite plausibilisieren.
+
+Bestätigt wurden fünf: die konsistente Wirksamkeit des Fine-Tunings,
+die dominierende Rolle sensorspezifischer Signalcharakteristiken beim
+Domänentransfer, der Vorteil eines progressiven gegenüber einem
+direkten Anpassungsvorgehen, die Wirksamkeit der zeitlichen
 Plausibilisierung -- letztere allerdings nur in Verbindung mit einem
-domänenangepassten Modell.
+domänenangepassten Modell -- sowie die Gyroskopdominanz unter den
+Merkmalen des Random Forest, die die Sensorempfehlung aus
+Kapitel~\ref{ch:properties} empirisch stützt.
+
+Bemerkenswert ist, dass drei dieser Befunde erst durch
+Kontrollexperimente oder Kreuzvalidierung gesichert werden konnten
+und in einer ersten, naheliegenden Auswertung jeweils anders
+ausgefallen wären.
 
 \subsection{Verbleibende Arbeitsschritte}
 
