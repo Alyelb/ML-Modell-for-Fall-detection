@@ -1,0 +1,520 @@
+/*
+ * CleverSole  --  Sturzerkennung in der Schuhsohle
+ * ESP32-C6 + MPU-6050
+ *
+ * Ablauf:
+ *   TIEFSCHLAF  -- Aufwachen durch Bewegungsinterrupt des MPU-6050
+ *   AUFWAKEN    -- Schrittzaehler laeuft, noch keine Inferenz
+ *   AKTIV       -- nach 10 Schritten: Fenster fuellen, Modell auswerten
+ *   -> zurueck in den Tiefschlaf nach 2 Minuten ohne Bewegung
+ *
+ * Signalkette (muss der Trainingspipeline entsprechen):
+ *   MPU 100 Hz, DLPF 44 Hz
+ *     -> Mittelung ueber zwei Abtastwerte (Anti-Aliasing)
+ *     -> 50 Hz, Fenster 100 x 6
+ *     -> Z-Normalisierung je Kanal
+ *     -> int8-Quantisierung
+ *     -> CNN
+ *     -> N-von-M-Voting
+ */
+
+#include <Wire.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+#include <esp_sleep.h>
+#include <driver/gpio.h>
+
+// ---------------------------------------------------------------
+//  KONFIGURATION
+// ---------------------------------------------------------------
+#define PIN_SDA        6
+#define PIN_SCL        7
+#define PIN_MPU_INT    4      // muss GPIO0..7 sein (LP-GPIO, weckfaehig)
+#define PIN_BATT_ADC   1      // Spannungsteiler 2:1 an die Batterie
+
+#define GERAETENAME    "CleverSole-01"
+
+// Ablauflogik
+#define SCHRITTE_START      10      // Inferenz erst nach so vielen Schritten
+#define RUHE_BIS_SCHLAF_MS  120000  // 2 Minuten ohne Bewegung
+#define INFERENZ_INTERVALL  5       // alle 5 neuen 50-Hz-Werte (0,1 s)
+
+// Schrittzaehler
+#define SCHRITT_SCHWELLE_G  1.35f
+#define SCHRITT_MIN_MS      250     // Entprellung
+#define RUHE_SCHWELLE_G     0.08f   // Abweichung von 1 g gilt als Ruhe
+
+// Voting (vorlaeufig; auf Pilotdaten neu bestimmen)
+#define VOTE_N              2
+#define VOTE_M              3
+#define VOTE_SCHWELLE       0.7f
+
+// Batterie (LiPo)
+#define BATT_LEER_MV        3300
+#define BATT_VOLL_MV        4200
+#define BATT_TEILER         2.0f
+
+// ---------------------------------------------------------------
+//  MPU-6050
+// ---------------------------------------------------------------
+#define MPU_ADDR       0x68
+#define REG_SMPLRT_DIV 0x19
+#define REG_CONFIG     0x1A
+#define REG_GYRO_CFG   0x1B
+#define REG_ACCEL_CFG  0x1C
+#define REG_MOT_THR    0x1F
+#define REG_MOT_DUR    0x20
+#define REG_INT_PIN    0x37
+#define REG_INT_ENABLE 0x38
+#define REG_INT_STATUS 0x3A
+#define REG_ACCEL_XOUT 0x3B
+#define REG_PWR_MGMT_1 0x6B
+
+// +-16 g  -> 2048 LSB/g ; +-2000 dps -> 16.384 LSB/(deg/s)
+static const float ACC_LSB = 1.0f / 2048.0f;
+static const float GYR_LSB = 1.0f / 16.384f;
+
+// ---------------------------------------------------------------
+//  FENSTER
+// ---------------------------------------------------------------
+#define FENSTER_LEN  100     // 2 s bei 50 Hz
+#define KANAELE      6
+
+static float  ring[FENSTER_LEN][KANAELE];
+static int    ring_pos   = 0;
+static int    ring_fuell = 0;
+
+// Dezimation 100 -> 50 Hz
+static float dezim_summe[KANAELE];
+static int   dezim_zaehler = 0;
+
+// ---------------------------------------------------------------
+//  ZUSTAND
+// ---------------------------------------------------------------
+enum Zustand { AUFWAKEN, AKTIV };
+RTC_DATA_ATTR static uint32_t alarme_gesamt = 0;
+RTC_DATA_ATTR static uint32_t schlafzyklen  = 0;
+
+static Zustand  zustand        = AUFWAKEN;
+static uint32_t schritte       = 0;
+static uint32_t letzterSchritt = 0;
+static uint32_t letzteBewegung = 0;
+static bool     ueberSchwelle  = false;
+static uint8_t  vote_puffer[VOTE_M];
+static int      vote_pos = 0;
+static int      seit_inferenz = 0;
+
+// ---------------------------------------------------------------
+//  BLE
+// ---------------------------------------------------------------
+#define UUID_BATT_SVC  "0000180F-0000-1000-8000-00805F9B34FB"
+#define UUID_BATT_LVL  "00002A19-0000-1000-8000-00805F9B34FB"
+#define UUID_FALL_SVC  "0000FFF0-0000-1000-8000-00805F9B34FB"
+#define UUID_FALL_CHR  "0000FFF1-0000-1000-8000-00805F9B34FB"
+
+static BLECharacteristic *chrBatterie = nullptr;
+static BLECharacteristic *chrAlarm    = nullptr;
+static bool verbunden = false;
+
+class ServerCB : public BLEServerCallbacks {
+  void onConnect(BLEServer*)    override { verbunden = true;  }
+  void onDisconnect(BLEServer* s) override {
+    verbunden = false;
+    s->startAdvertising();
+  }
+};
+
+// ---------------------------------------------------------------
+//  I2C-HILFSFUNKTIONEN
+// ---------------------------------------------------------------
+static void mpuSchreibe(uint8_t reg, uint8_t wert) {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(reg);
+  Wire.write(wert);
+  Wire.endTransmission();
+}
+
+static uint8_t mpuLese(uint8_t reg) {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(reg);
+  Wire.endTransmission(false);
+  Wire.requestFrom((int)MPU_ADDR, 1);
+  return Wire.available() ? Wire.read() : 0;
+}
+
+static bool mpuLeseMessung(float *out) {
+  Wire.beginTransmission(MPU_ADDR);
+  Wire.write(REG_ACCEL_XOUT);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom((int)MPU_ADDR, 14) != 14) return false;
+
+  int16_t roh[7];
+  for (int i = 0; i < 7; i++) {
+    roh[i] = (int16_t)((Wire.read() << 8) | Wire.read());
+  }
+  // roh[3] ist die Temperatur und wird uebersprungen
+  out[0] = roh[0] * ACC_LSB;
+  out[1] = roh[1] * ACC_LSB;
+  out[2] = roh[2] * ACC_LSB;
+  out[3] = roh[4] * GYR_LSB;
+  out[4] = roh[5] * GYR_LSB;
+  out[5] = roh[6] * GYR_LSB;
+  return true;
+}
+
+// ---------------------------------------------------------------
+//  MPU EINRICHTEN
+// ---------------------------------------------------------------
+static bool mpuInit() {
+  mpuSchreibe(REG_PWR_MGMT_1, 0x80);     // Reset
+  delay(100);
+  mpuSchreibe(REG_PWR_MGMT_1, 0x01);     // PLL mit X-Gyro als Takt
+  delay(50);
+
+  // DLPF 44 Hz. Das Gyroskop laeuft damit intern mit 1 kHz,
+  // SMPLRT_DIV = 9 ergibt 1000/(1+9) = 100 Hz Ausgaberate.
+  mpuSchreibe(REG_CONFIG,     0x03);
+  mpuSchreibe(REG_SMPLRT_DIV, 9);
+
+  mpuSchreibe(REG_ACCEL_CFG,  0x18);     // +-16 g
+  mpuSchreibe(REG_GYRO_CFG,   0x18);     // +-2000 deg/s
+
+  uint8_t id = mpuLese(0x75);            // WHO_AM_I
+  Serial.printf("MPU WHO_AM_I = 0x%02X (erwartet 0x68)\n", id);
+  return (id == 0x68);
+}
+
+// Bewegungsinterrupt fuer das Aufwachen aus dem Tiefschlaf
+static void mpuBewegungsInterrupt() {
+  mpuSchreibe(REG_PWR_MGMT_1, 0x01);
+  mpuSchreibe(REG_ACCEL_CFG,  0x18 | 0x07);  // Hochpass auf HOLD
+  mpuSchreibe(REG_MOT_THR,    2);            // 1 LSB = 32 mg
+  mpuSchreibe(REG_MOT_DUR,    40);           // 1 LSB = 1 ms
+  mpuSchreibe(REG_INT_PIN,    0x20);         // Latch bis zum Auslesen
+  mpuSchreibe(REG_INT_ENABLE, 0x40);         // Motion-Interrupt an
+  mpuLese(REG_INT_STATUS);                   // Flag loeschen
+}
+
+// ---------------------------------------------------------------
+//  BATTERIE
+// ---------------------------------------------------------------
+static uint8_t batterieProzent() {
+  uint32_t summe = 0;
+  for (int i = 0; i < 16; i++) summe += analogReadMilliVolts(PIN_BATT_ADC);
+  float mv = (summe / 16.0f) * BATT_TEILER;
+
+  if (mv <= BATT_LEER_MV) return 0;
+  if (mv >= BATT_VOLL_MV) return 100;
+  return (uint8_t)(100.0f * (mv - BATT_LEER_MV) /
+                   (BATT_VOLL_MV - BATT_LEER_MV));
+}
+
+// ---------------------------------------------------------------
+//  BLE EINRICHTEN
+// ---------------------------------------------------------------
+static void bleInit() {
+  BLEDevice::init(GERAETENAME);
+  BLEServer *server = BLEDevice::createServer();
+  server->setCallbacks(new ServerCB());
+
+  // Standard-Batteriedienst: Scanner zeigen den Ladestand direkt an
+  BLEService *svcBatt = server->createService(UUID_BATT_SVC);
+  chrBatterie = svcBatt->createCharacteristic(
+      UUID_BATT_LVL,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  chrBatterie->addDescriptor(new BLE2902());
+  svcBatt->start();
+
+  BLEService *svcFall = server->createService(UUID_FALL_SVC);
+  chrAlarm = svcFall->createCharacteristic(
+      UUID_FALL_CHR,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  chrAlarm->addDescriptor(new BLE2902());
+  svcFall->start();
+
+  BLEAdvertising *adv = BLEDevice::getAdvertising();
+  adv->addServiceUUID(UUID_BATT_SVC);
+  adv->addServiceUUID(UUID_FALL_SVC);
+
+  // Name und Ladestand in die Werbedaten legen, damit beides schon
+  // vor dem Verbinden sichtbar ist. Die MAC-Adresse laesst sich nicht
+  // unterdruecken -- sie gehoert zum Protokoll --, Scanner zeigen
+  // jedoch den Namen an, sobald einer vorhanden ist.
+  uint8_t stand = batterieProzent();
+  BLEAdvertisementData werbung;
+  werbung.setName(GERAETENAME);
+  werbung.setFlags(0x06);
+   String hersteller;
+  hersteller += (char)0xFF;      // Test-ID (0xFFFF)
+  hersteller += (char)0xFF;
+  hersteller += (char)stand;     // Ladestand in Prozent
+  werbung.setManufacturerData(hersteller);
+  adv->setAdvertisementData(werbung);
+
+  adv->setScanResponse(true);
+  BLEDevice::startAdvertising();
+
+  chrBatterie->setValue(&stand, 1);
+  Serial.printf("BLE aktiv als \"%s\", Batterie %u %%\n",
+                GERAETENAME, stand);
+}
+
+static void bleAlarmSenden(float wahrscheinlichkeit) {
+  alarme_gesamt++;
+  char msg[64];
+  snprintf(msg, sizeof(msg), "STURZ p=%.2f n=%lu batt=%u",
+           wahrscheinlichkeit, (unsigned long)alarme_gesamt,
+           batterieProzent());
+  Serial.println(msg);
+  if (chrAlarm) {
+    chrAlarm->setValue((uint8_t*)msg, strlen(msg));
+    if (verbunden) chrAlarm->notify();
+  }
+}
+
+// ---------------------------------------------------------------
+//  SCHRITTZAEHLER
+// ---------------------------------------------------------------
+static void schrittPruefen(float betrag, uint32_t jetzt) {
+  if (betrag > SCHRITT_SCHWELLE_G && !ueberSchwelle) {
+    if (jetzt - letzterSchritt > SCHRITT_MIN_MS) {
+      schritte++;
+      letzterSchritt = jetzt;
+      if (zustand == AUFWAKEN && schritte >= SCHRITTE_START) {
+        zustand = AKTIV;
+        Serial.printf("%lu Schritte erkannt -> Inferenz aktiv\n",
+                      (unsigned long)schritte);
+      }
+    }
+    ueberSchwelle = true;
+  } else if (betrag < SCHRITT_SCHWELLE_G - 0.1f) {
+    ueberSchwelle = false;            // Hysterese
+  }
+}
+
+// ---------------------------------------------------------------
+//  TIEFSCHLAF
+// ---------------------------------------------------------------
+static void schlafenGehen() {
+  Serial.printf("Ruhe seit %lu ms -> Tiefschlaf (Zyklus %lu)\n",
+                (unsigned long)RUHE_BIS_SCHLAF_MS,
+                (unsigned long)schlafzyklen);
+  Serial.flush();
+
+  schlafzyklen++;
+  BLEDevice::deinit(true);
+  mpuBewegungsInterrupt();
+
+  gpio_set_direction((gpio_num_t)PIN_MPU_INT, GPIO_MODE_INPUT);
+  gpio_pullup_dis((gpio_num_t)PIN_MPU_INT);
+  gpio_pulldown_en((gpio_num_t)PIN_MPU_INT);
+  esp_deep_sleep_enable_gpio_wakeup(1ULL << PIN_MPU_INT,
+                                    ESP_GPIO_WAKEUP_GPIO_HIGH);
+  esp_deep_sleep_start();
+}
+
+// ---------------------------------------------------------------
+//  INFERENZ
+// ---------------------------------------------------------------
+#include "modell.h"          // fall_model_int8.tflite als C-Array
+
+#if MODELL_VERFUEGBAR
+  #include <TensorFlowLite_ESP32.h>
+  #include "tensorflow/lite/micro/micro_interpreter.h"
+  #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
+  #include "tensorflow/lite/schema/schema_generated.h"
+
+  constexpr int ARENA_GROESSE = 60 * 1024;
+  static uint8_t arena[ARENA_GROESSE];
+  static tflite::MicroInterpreter *interp = nullptr;
+  static TfLiteTensor *eingang = nullptr;
+  static TfLiteTensor *ausgang = nullptr;
+
+  static bool modellInit() {
+    const tflite::Model *m = tflite::GetModel(modell_tflite);
+    if (m->version() != TFLITE_SCHEMA_VERSION) {
+      Serial.println("Modell: falsche Schema-Version");
+      return false;
+    }
+    static tflite::MicroMutableOpResolver<8> resolver;
+    resolver.AddConv2D();
+    resolver.AddDepthwiseConv2D();
+    resolver.AddMaxPool2D();
+    resolver.AddMean();               // GlobalAveragePooling
+    resolver.AddFullyConnected();
+    resolver.AddRelu();
+    resolver.AddLogistic();           // Sigmoid
+    resolver.AddReshape();
+
+    static tflite::MicroInterpreter statischer(
+        m, resolver, arena, ARENA_GROESSE);
+    interp = &statischer;
+    if (interp->AllocateTensors() != kTfLiteOk) {
+      Serial.println("AllocateTensors fehlgeschlagen - Arena zu klein?");
+      return false;
+    }
+    eingang = interp->input(0);
+    ausgang = interp->output(0);
+    Serial.printf("Modell geladen. Arena benutzt: %u von %u Byte\n",
+                  interp->arena_used_bytes(), ARENA_GROESSE);
+    return true;
+  }
+
+  // Z-Normalisierung je Kanal, danach int8-Quantisierung.
+  // Muss der Trainingspipeline exakt entsprechen.
+  static float modellAuswerten() {
+    float mittel[KANAELE] = {0}, streuung[KANAELE] = {0};
+
+    for (int c = 0; c < KANAELE; c++) {
+      for (int t = 0; t < FENSTER_LEN; t++) {
+        mittel[c] += ring[(ring_pos + t) % FENSTER_LEN][c];
+      }
+      mittel[c] /= FENSTER_LEN;
+    }
+    for (int c = 0; c < KANAELE; c++) {
+      for (int t = 0; t < FENSTER_LEN; t++) {
+        float d = ring[(ring_pos + t) % FENSTER_LEN][c] - mittel[c];
+        streuung[c] += d * d;
+      }
+      streuung[c] = sqrtf(streuung[c] / FENSTER_LEN) + 1e-8f;
+    }
+
+    const float  skala = eingang->params.scale;
+    const int    null  = eingang->params.zero_point;
+    int8_t      *ziel  = eingang->data.int8;
+
+    for (int t = 0; t < FENSTER_LEN; t++) {
+      int idx = (ring_pos + t) % FENSTER_LEN;
+      for (int c = 0; c < KANAELE; c++) {
+        float norm = (ring[idx][c] - mittel[c]) / streuung[c];
+        int   q    = lroundf(norm / skala) + null;
+        if (q < -128) q = -128;
+        if (q >  127) q =  127;
+        ziel[t * KANAELE + c] = (int8_t)q;
+      }
+    }
+
+    if (interp->Invoke() != kTfLiteOk) return -1.0f;
+    return (ausgang->data.int8[0] - ausgang->params.zero_point) *
+           ausgang->params.scale;
+  }
+#else
+  static bool  modellInit()      { return false; }
+  static float modellAuswerten() { return -1.0f; }
+#endif
+
+// N-von-M-Voting
+static bool votingAusloesen(float p) {
+  vote_puffer[vote_pos] = (p > VOTE_SCHWELLE) ? 1 : 0;
+  vote_pos = (vote_pos + 1) % VOTE_M;
+  int summe = 0;
+  for (int i = 0; i < VOTE_M; i++) summe += vote_puffer[i];
+  return summe >= VOTE_N;
+}
+
+// ---------------------------------------------------------------
+//  SETUP
+// ---------------------------------------------------------------
+static bool modellBereit = false;
+
+void setup() {
+  Serial.begin(115200);
+  delay(300);
+
+  esp_sleep_wakeup_cause_t grund = esp_sleep_get_wakeup_cause();
+  Serial.printf("\n--- CleverSole (Aufwachgrund %d, Zyklus %lu) ---\n",
+                (int)grund, (unsigned long)schlafzyklen);
+
+  Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(400000);
+
+  if (!mpuInit()) {
+    Serial.println("MPU-6050 nicht gefunden - Verkabelung pruefen.");
+    while (true) delay(1000);
+  }
+
+  analogReadResolution(12);
+  bleInit();
+  modellBereit = modellInit();
+  if (!modellBereit) {
+    Serial.println("Kein Modell -- nur Schrittzaehlung und Schlaflogik.");
+  }
+
+  zustand        = AUFWAKEN;
+  schritte       = 0;
+  letzteBewegung = millis();
+  memset(vote_puffer, 0, sizeof(vote_puffer));
+  memset(dezim_summe, 0, sizeof(dezim_summe));
+}
+
+// ---------------------------------------------------------------
+//  HAUPTSCHLEIFE
+// ---------------------------------------------------------------
+void loop() {
+  static uint32_t naechsteMessung = 0;
+  static uint32_t letzteBatterie  = 0;
+  uint32_t jetzt = millis();
+
+  if (jetzt >= naechsteMessung) {
+    naechsteMessung = jetzt + 10;        // 100 Hz
+
+    float messung[KANAELE];
+    if (!mpuLeseMessung(messung)) return;
+
+    float betrag = sqrtf(messung[0]*messung[0] +
+                         messung[1]*messung[1] +
+                         messung[2]*messung[2]);
+
+    if (fabsf(betrag - 1.0f) > RUHE_SCHWELLE_G) letzteBewegung = jetzt;
+    schrittPruefen(betrag, jetzt);
+
+    // Mittelung ueber zwei Werte: wirkt als einfaches Anti-Aliasing
+    // vor der Dezimation auf 50 Hz. Die Trainingsdaten wurden mit
+    // einem Polyphasenfilter heruntergetastet; diese Naeherung ist
+    // auf den Pilotdaten zu ueberpruefen.
+    for (int c = 0; c < KANAELE; c++) dezim_summe[c] += messung[c];
+    if (++dezim_zaehler >= 2) {
+      for (int c = 0; c < KANAELE; c++) {
+        ring[ring_pos][c] = dezim_summe[c] / 2.0f;
+        dezim_summe[c] = 0;
+      }
+      ring_pos = (ring_pos + 1) % FENSTER_LEN;
+      if (ring_fuell < FENSTER_LEN) ring_fuell++;
+      dezim_zaehler = 0;
+      seit_inferenz++;
+
+      if (zustand == AKTIV && modellBereit &&
+          ring_fuell >= FENSTER_LEN &&
+          seit_inferenz >= INFERENZ_INTERVALL) {
+        seit_inferenz = 0;
+        uint32_t t0 = micros();
+        float p = modellAuswerten();
+        uint32_t dauer = micros() - t0;
+
+        static uint32_t zaehler = 0;
+        if (++zaehler % 50 == 0) {
+          Serial.printf("p=%.3f  Inferenz %lu us  Schritte %lu\n",
+                        p, (unsigned long)dauer,
+                        (unsigned long)schritte);
+        }
+        if (p >= 0 && votingAusloesen(p)) {
+          bleAlarmSenden(p);
+          memset(vote_puffer, 0, sizeof(vote_puffer));
+        }
+      }
+    }
+  }
+
+  if (jetzt - letzteBatterie > 30000) {
+    letzteBatterie = jetzt;
+    uint8_t stand = batterieProzent();
+    if (chrBatterie) {
+      chrBatterie->setValue(&stand, 1);
+      if (verbunden) chrBatterie->notify();
+    }
+  }
+
+  if (jetzt - letzteBewegung > RUHE_BIS_SCHLAF_MS) schlafenGehen();
+}

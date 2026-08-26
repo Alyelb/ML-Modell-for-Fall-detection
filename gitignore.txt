@@ -1,0 +1,46 @@
+# --- Python ---
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# --- Datensaetze ---
+# Nicht im Repository: zu gross und teils lizenzpflichtig.
+# Bezugsquellen stehen in der README.
+data/
+Pilotdaten/
+
+# --- Trainierte Modelle ---
+# Werden von den Notebooks erzeugt und in Google Drive gesichert.
+# Ausnahme: das quantisierte Modell wird verfolgt, da die Firmware
+# es benoetigt (siehe !fall_model_int8.tflite unten).
+*.keras
+*.h5
+*.tflite
+!firmware/**/fall_model_int8.tflite
+
+# --- Ergebnisse ---
+# Ergebnisordner der Notebooks liegen in Google Drive.
+results/
+
+# --- Arbeitsdateien ---
+# Zwischenstaende der Firmware-Entwicklung
+firmware/**/aktuell.txt
+firmware/**/modell_roh.h
+
+# --- LaTeX-Hilfsdateien ---
+# main.pdf wird bewusst verfolgt, damit es auf GitHub lesbar ist.
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.bbl
+report/*.blg
+report/*.fls
+report/*.fdb_latexmk
+report/*.synctex.gz
+
+# --- Betriebssystem ---
+Thumbs.db
+desktop.ini
+.DS_Store

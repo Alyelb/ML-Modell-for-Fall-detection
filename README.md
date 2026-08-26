@@ -1,147 +1,328 @@
 # Sensor-Based Fall Detection with Machine Learning
 
-<<<<<<< HEAD
-> **[📄 Read the Full Report (PDF)](report/main.pdf)**
+TinyML fall detection for a shoe-insole IMU, targeting the ESP32-C6.
+Master's project (Studienprojekt 2), TH Mittelhessen.
 
-**Studienprojekt 2**  TH Mittelhessen, Fachbereich 12 (Elektro- und Informationstechnik)
-
-| | |
-|---|---|
-| **Author** | Aly Elbermawy
-| **Semester** | SS 2026 |
+The project trains on public fall datasets, quantifies how well such
+models transfer to a foot-mounted sensor, and deploys the result to real
+hardware.
 
 ---
 
-## Project Goal
-
-Develop a TinyML pipeline for **real-time fall detection** using a 6-axis IMU embedded in a **shoe insole**, targeting elderly and dementia patients. The system runs on an **ESP32-C6 microcontroller** with an external **MPU-6050** sensor.
-
----
-
-## Current Results
-
-All evaluations are **subject-independent** (tested on persons not seen during training).
-
-| Model | Sensitivity | Specificity | Accuracy | FP | FN |
-|---|---|---|---|---|---|
-| Threshold (Bourke) | 96.7 % | 76.8 % | 77.5 % | 11,503 | 59 |
-| Random Forest | 94.2 % | 99.6 % | 99.4 % | 215 | 105 |
-| **1D-CNN** | **98.0 %** | **99.7 %** | **99.6 %** | **39** | **18** |
-
-The int8-quantized TFLite model is **64 KB** — fits comfortably in the ESP32-C6's 4 MB flash.
-
----
-=======
-Master's project (Studienprojekt 2) at TH Mittelhessen — TinyML fall-detection pipeline for a shoe-insole IMU, targeting the ESP32-C6 microcontroller.
->>>>>>> 3da57f87 (Add ESP32 firmware + update README for public repo)
-
-## Project Structure
+## Repository structure
 
 ```
 .
-├── fall_pipeline.py            # Threshold baseline + Random Forest
-├── cnn_pipeline.py             # 1D-CNN training + int8 TFLite export
-├── cross_position.py           # Transfer SisFall → UMAFall (WAIST / ANKLE)
-├── cross_dataset_kfall.py      # Transfer SisFall → KFall
-├── cross_dataset_fallalld.py   # Transfer SisFall → FallAllD
-├── experiments.py              # Batch runner for multiple experiments
+├── fall_lib.py              Shared library — all dataset loaders,
+│                            windowing, models, evaluation, voting,
+│                            cross-validation. Single source of truth;
+│                            every notebook imports it.
+├── fall_pipeline.py         Standalone threshold + Random Forest
+├── cnn_pipeline.py          Standalone 1D-CNN training
 ├── requirements.txt
 │
-├── report/                     # LaTeX report (auto-compiled via GitHub Actions)
+├── notebook/                One notebook per report section
+│   ├── 01_basismodelle      Threshold, RF, CNN on SisFall + TFLite export
+│   ├── 02_transfer          KFall, UMAFall, FallAllD + clipping control
+│   ├── 03_fehlalarme        False-positive test, N-of-M voting
+│   ├── 04_achsen            3-axis vs 6-axis ablation + UniMiB-SHAR
+│   ├── 05_zielgruppe        WEDA-FALL, elderly vs younger subjects
+│   ├── 06_progressiv        Progressive fine-tuning (single split)
+│   ├── 07_progressiv_cv     Same, 5-fold cross-validated
+│   ├── 08_hardneg_cv        Hard-negative weighting, cross-validated
+│   └── 09_pilotdaten        Recordings from the target hardware
+│
+├── firmware/                Arduino sketches for ESP32-C6 + MPU-6050/6500
+│   ├── CleverSole/          Full detector: steps, inference, voting,
+│   │                        deep sleep, BLE
+│   ├── SensorLive/          Live sensor readout (serial + BLE UART)
+│   ├── DatenLogger/         100 Hz recorder to internal flash
+│   └── sketch_aug21a/       First I2C test sketch
+│
+├── report/                  LaTeX report, auto-compiled on every push
 │   ├── main.tex
-│   ├── main.pdf                # ← viewable inline on GitHub
+│   ├── main.pdf             ← viewable inline on GitHub
 │   └── references.bib
 │
-├── ESP32_Code/                 # Firmware for ESP32-C6 + MPU-6050
-│   └── sketch_aug21a/
-│       └── sketch_aug21a.ino
-│
-└── .github/workflows/          # CI: LaTeX → PDF on every push
-    └── build-pdf.yml
+└── .github/workflows/       CI: LaTeX → PDF
 ```
 
-## ML Pipeline
+Datasets and trained models are not tracked. Download the datasets from
+their sources and place them under `data/`.
 
-Three models, each building on the previous:
+---
 
-| Model | Type | Sensitivity | Specificity | Accuracy |
-|---|---|---|---|---|
-| Threshold (Bourke) | Rule-based baseline | 96.7% | 76.8% | 77.5% |
-| Random Forest | Classical ML (18 features) | 94.2% | 99.6% | 99.4% |
-| **1D-CNN** | **Deep Learning (raw signal)** | **98.0%** | **99.7%** | **99.6%** |
+## Signal processing
 
-All evaluations are **subject-independent** (GroupKFold / GroupShuffleSplit).
-
-The 1D-CNN has 45,601 parameters and exports to a **64 KB** int8 TFLite model.
-
-## Cross-Dataset Transfer Results
-
-The trained SisFall model was evaluated on three external datasets to test generalization:
-
-| Dataset | Position | Native Hz | Zero-Shot Se | Fine-Tuned Se |
-|---|---|---|---|---|
-| KFall | Lower back | 100 | **83.5%** | 96.4% |
-| UMAFall | Waist | 20 | 42.2% | 92.2% |
-| UMAFall | Ankle | 20 | 34.8% | 80.1% |
-| FallAllD | Waist | 238 | 13.6% | 84.6% |
-
-**Key finding:** Zero-shot transfer success depends on sensor-specific signal characteristics, not just sampling rate or measurement range. A clipping control experiment confirmed that FallAllD's ±8g range is not the cause of transfer failure. Fine-tuning consistently recovers performance across all configurations.
-
-## Signal Processing Pipeline
+Identical in training and on the device:
 
 ```
-Raw ADC → Physical units (g, °/s) → Downsample to 50 Hz
-→ 2s sliding windows (50% overlap, impact-centered for falls)
-→ Per-window z-normalization → Model
+Raw ADC → physical units (g, °/s) → downsample to 50 Hz
+→ 2 s windows (100 × 6), impact-centred for falls
+→ per-window, per-channel z-normalisation → model
 ```
 
-## Datasets Used
+The downsampling filter matters: a signal decimated from 200 Hz to
+20 Hz keeps 96.8 % sensitivity, while one natively recorded at 20 Hz
+drops to 34.0 %. Anti-aliasing preserves the impact envelope; without
+it the peak is lost. This is why the firmware runs the sensor at
+≥ 100 Hz with its internal low-pass filter enabled and decimates in
+software.
 
-| Dataset | Subjects | Hz | Sensor Position | Role |
+---
+
+## Baseline models (SisFall, subject-independent)
+
+| Model | Sensitivity | Specificity | Accuracy |
+|---|---|---|---|
+| Threshold (Bourke, 2.8 g) | 96.7 % | 82.9 % | 83.2 % |
+| Random Forest (18 features) | 92.7 % | 99.6 % | 99.4 % |
+| **1D-CNN** | **98.7 %** | **99.8 %** | **99.8 %** |
+
+The CNN has 61,601 parameters and exports to a 77.6 KB int8 TFLite
+model.
+
+The Random Forest uses 18 rotation-invariant features derived from the
+acceleration and angular-rate magnitudes — the sensor's orientation
+inside the shoe does not affect them, which matters when the insole
+can be inserted either way. Verified numerically: after a random 3-D
+rotation, 100 % of predictions are unchanged.
+
+Gyroscope features carry **62.3 %** of total feature importance, with
+`gyr_std` ranking first at 23.6 %. Since features are split evenly
+between the two sensors, 50 % would mean no preference — the observed
+value supports the six-axis recommendation.
+
+---
+
+## Cross-dataset transfer
+
+| Dataset | Position | Native Hz | Range | Zero-Shot Se | Fine-Tuned Se |
+|---|---|---|---|---|---|
+| KFall | Lower back | 100 | ±16 g | **100.0 %** | 100.0 % |
+| UMAFall | Waist | 20 | ±16 g | 43.8 % | 91.7 % |
+| UMAFall | Ankle | 20 | ±16 g | 19.4 % | 27.8 % |
+| FallAllD | Waist | 238 | ±8 g | 12.7 % | 69.8 % |
+
+**Zero-shot success is not explained by any single factor.** FallAllD
+has the highest sampling rate of all yet the worst zero-shot result. A
+control experiment ruled out the measurement range: clipping SisFall
+synthetically to ±8 g, ±4 g and even ±2 g leaves the results
+essentially unchanged, because only 0.5 % of windows ever exceed 8 g.
+What remains is the sensor's own signal characteristics — internal
+filtering, noise, response time. Fine-tuning recovers performance in
+every case.
+
+---
+
+## False alarms
+
+Tested on ankle-mounted ADL recordings only, so every positive is by
+definition a false alarm:
+
+| | Rate | Per hour |
+|---|---|---|
+| Overall | 2.61 % | ~94 |
+| Jogging | 15.44 % | |
+| Walking | 3.65 % | |
+| Clapping | 0.55 % | |
+
+The pattern follows ground contact: each heel strike produces a short,
+steep acceleration pulse that resembles an impact. The model is not
+uncertain about these — it assigns them probability 1.000 — so raising
+the decision threshold alone does not solve it.
+
+### Temporal voting
+
+Requiring N of the last M windows to be positive (0.2 s step) cuts
+false alarms by 84 % but costs 55 % of sensitivity on this data. A
+coarser 1.0 s step fails outright: the impact then falls inside a
+single window, so any rule with N ≥ 2 is mathematically unable to
+fire.
+
+Voting also **depends on domain adaptation**. Going from 1-of-1 to
+5-of-7 costs the unadapted model 88 % of its sensitivity but the
+fine-tuned model only 55 %. An unadapted model emits scattered,
+isolated positives that the rule discards; an adapted one emits a
+contiguous block around the impact. Order matters: fine-tune first,
+then vote.
+
+---
+
+## Cross-validated findings
+
+Two questions gave misleading answers on a single split and were
+repeated with 5-fold subject-independent cross-validation and paired
+comparison.
+
+**Progressive fine-tuning — confirmed.** Adapting via an intermediate
+dataset beats direct adaptation:
+
+| Strategy | Sensitivity (95 % CI) |
+|---|---|
+| Zero-shot | 25.5 % [19.3; 32.8] |
+| Direct: SisFall → target | 42.7 % [35.2; 50.5] |
+| After KFall stage only | 17.2 % [12.1; 23.9] |
+| **Progressive: SisFall → KFall → target** | **52.2 % [44.5; 59.9]** |
+
+Paired difference +9.9 pp (95 % CI [+5.1; +14.7]), better in 5 of 5
+folds, specificity unchanged. Note that the intermediate stage on its
+own makes things *worse* — it generalises the representation rather
+than improving it.
+
+**Hard-negative weighting — rejected.** Up-weighting high-impact ADL
+windows trades sensitivity for specificity: −8.2 pp Se and +2.0 pp Sp,
+both significant, both consistent across all five folds. In absolute
+terms, 166 fewer false alarms but 23 more missed falls. For fall
+detection that is the wrong direction: voting can suppress false
+alarms downstream, but nothing recovers a missed fall.
+
+Plain fine-tuning raised sensitivity from 12.4 % to 75.2 % — domain
+adaptation outperforms every add-on measure tested.
+
+---
+
+## Axis ablation
+
+Three models, identical architecture, split and hyperparameters; only
+the input channels differ.
+
+| Variant | Sensitivity | Specificity | Parameters |
+|---|---|---|---|
+| 6 axes (acc + gyro) | 98.3 % | 99.9 % | 61,601 |
+| 3 axes (acc only) | 98.0 % | 99.8 % | 61,121 |
+| 3 axes (gyro only) | 93.3 % | 99.3 % | 61,121 |
+
+On SisFall the gyroscope contributes only 0.3 pp — but both variants
+sit near the ceiling, where small differences vanish, and the position
+is the waist, where walking is smooth. At the foot, where acceleration
+is saturated by heel strikes, the picture may differ.
+
+External check on UniMiB-SHAR (accelerometer only, ±2 g smartphone):
+zero-shot 21.3 %, fine-tuned 95.9 %.
+
+---
+
+## Target group
+
+WEDA-FALL includes 11 subjects aged 77–95 alongside 14 younger ones —
+every other dataset used here is predominantly young. The older group
+performed no falls for safety reasons, so only the false-alarm rate is
+assessable, and only on the six activities both groups performed.
+
+Aggregated, the older group produces 3.8× more false alarms. Broken
+down by movement, almost all of it comes from one activity:
+
+| Movement | Older | Younger |
+|---|---|---|
+| Walking | 0.70 % | 0.41 % |
+| Stairs | 0.81 % | 1.98 % |
+| **Clapping** | **25.51 %** | **2.54 %** |
+
+Walking and stair climbing — the movements that matter for an insole —
+are comparable. There is no evidence that everyday movements of older
+people are inherently harder to classify. The aggregate figure alone
+would have hidden this.
+
+---
+
+## Datasets
+
+| Dataset | Subjects | Hz | Position | Role |
 |---|---|---|---|---|
 | [SisFall](https://doi.org/10.3390/s17010198) | 38 | 200 | Hip | Primary training |
-| [KFall](https://doi.org/10.3390/s21093199) | 32 | 100 | Lower back | Transfer validation |
-| [UMAFall](https://doi.org/10.3390/s17010120) | 19 | 20 | Multi-position | Position transfer |
-| [FallAllD](https://doi.org/10.1109/JSEN.2019.2966342) | 15 | 238 | Multi-position | Sensor transfer |
+| [KFall](https://doi.org/10.3390/s21093199) | 32 | 100 | Lower back | Transfer, intermediate stage |
+| [UMAFall](https://doi.org/10.3390/s17010120) | 19 | 20 | 5 positions | Position transfer, FP test |
+| [FallAllD](https://doi.org/10.1109/JSEN.2019.2966342) | 15 | 238 | 3 positions | Sensor transfer |
+| [UniMiB-SHAR](https://doi.org/10.3390/app7101101) | 30 | 50 | Pocket | 3-axis check |
+| WEDA-FALL | 25 | 50 | Wrist | Target group |
 
-Data not included — download from the respective sources and place in `data/`.
+Two documentation discrepancies worth noting for anyone reusing these
+datasets:
 
-## Hardware Target
+- **KFall fall tasks are T20–T34, not T22–T36.** The bundled label
+  files list F01 as task 20; the annotated `Fall_impact_frame` matches
+  the measured acceleration peak at T20 to within one sample, and not
+  at T22. The earlier assumption mislabelled 606 of 5075 recordings.
+- **The Smart Insole Database contains no IMU channels** despite its
+  documentation. All 30 published files hold only 38 CapSense pressure
+  electrodes and force-plate readings.
 
-- **MCU:** ESP32-C6 (RISC-V, 160 MHz, WiFi 6, BLE 5)
-- **IMU:** MPU-6050 via I2C (configured at ±16g, ±2000°/s, 100 Hz, DLPF enabled)
-- **Deployment:** int8 TFLite model (64 KB) on 4 MB flash
+No public dataset contains falls recorded from a foot-mounted IMU.
+That gap is what this project addresses.
 
-## Quick Start
+---
+
+## Hardware
+
+- **MCU:** ESP32-C6 (RISC-V, WiFi 6, BLE 5)
+- **IMU:** MPU-6050 or MPU-6500 via I2C, ±16 g, ±2000 °/s, 100 Hz,
+  internal DLPF enabled
+- **Model:** int8 TFLite, 77.6 KB on 4 MB flash
+
+The firmware auto-detects the sensor: `WHO_AM_I` 0x68 is an MPU-6050,
+0x70 an MPU-6500, 0x71 an MPU-9250. This matters because the MPU-6500
+has a separate accelerometer filter register (0x1D) that the 6050 does
+not — left unset, its filter stays at 460 Hz and the anti-aliasing
+before decimation is missing.
+
+### Firmware parameters
+
+| Parameter | Value | Status |
+|---|---|---|
+| Sensor ODR | ≥ 100 Hz, DLPF on | established |
+| Measurement range | ±16 g | established |
+| Model input | 100 × 6 (2 s @ 50 Hz) | established |
+| Inference interval | 200 ms | established |
+| Voting window M | 3–7 | provisional |
+| Voting threshold N | 2–5 | provisional |
+| Decision threshold | 0.5–0.9 | provisional |
+
+The upper four follow from physics and the control experiments and
+hold regardless of domain. The lower three describe a
+sensitivity/false-alarm trade-off that depends on the adapted model;
+no satisfactory operating point was found on public ankle data, so
+they must be set on pilot recordings from the target hardware.
+
+---
+
+## Quick start
 
 ```bash
 python -m venv venv
-source venv/bin/activate        # Linux/Mac
-venv\Scripts\activate           # Windows
-
+source venv/bin/activate      # Linux/macOS
+venv\Scripts\activate         # Windows
 pip install -r requirements.txt
-
-python fall_pipeline.py         # Threshold + Random Forest
-python cnn_pipeline.py          # 1D-CNN + TFLite export
-python cross_dataset_kfall.py   # Transfer to KFall
-python cross_dataset_fallalld.py # Transfer to FallAllD
 ```
 
-## Current Status
+Notebooks run in Colab and fetch `fall_lib.py` from this repository.
+Run `01_basismodelle` first — it produces the model the others load.
 
-- [x] Theoretical sensor comparison (3/6/9-axis)
+For the firmware: Arduino IDE, board *ESP32C6 Dev Module*, partition
+scheme *Huge APP*, and `USB CDC On Boot: Enabled` (without it the
+serial output goes to the UART pins instead of USB).
+
+---
+
+## Status
+
+- [x] Sensor comparison (3/6/9 axes)
 - [x] Sensor property analysis
-- [x] Dataset evaluation (7 public datasets)
-- [x] ML models: Threshold, Random Forest, 1D-CNN
-- [x] Cross-dataset transfer: KFall, UMAFall, FallAllD
-- [x] Clipping control experiment
-- [ ] ESP32-C6 firmware + MPU-6050 integration
-- [ ] Pilot foot dataset collection
-- [ ] On-device TFLite deployment
+- [x] Dataset evaluation
+- [x] Threshold, Random Forest, 1D-CNN
+- [x] Cross-dataset transfer with control experiments
+- [x] False-alarm analysis and temporal voting
+- [x] Cross-validated method comparison
+- [x] Firmware: sensor, step detection, deep sleep, BLE
+- [ ] TFLite deployment on device
+- [ ] Pilot recordings at waist and foot
+- [ ] Voting parameters from pilot data
+- [ ] Long-lie detection
 
 ## Report
 
-The full report (German) is auto-compiled on every push and viewable at [`report/main.pdf`](report/main.pdf).
+The full report (German) compiles automatically on every push:
+[`report/main.pdf`](report/main.pdf).
 
 ## License
 

@@ -1162,12 +1162,16 @@ auftreten.
 Genauigkeit $99{,}4\,\%$. Die Spezifität steigt gegenüber der
 Schwellwert-Baseline von $76{,}8\,\%$ auf $99{,}6\,\%$, was die Anzahl
 falsch-positiver Alarme um den Faktor~$50$ reduziert. Die
-Feature-Importance-Analyse des Random Forest bestätigt die
-Schlussfolgerung aus Kapitel~\ref{ch:comparison}: Vier der fünf
-wichtigsten Merkmale basieren auf dem Gyroskop
-(\texttt{gyr\_std}, \texttt{gyr\_max}, \texttt{gyr\_energy},
-\texttt{gyr\_rms}), was den Beitrag der sechsten Achse zur
-Falsch-Positiv-Reduktion quantitativ belegt.
+Feature-Importance-Analyse des Random Forest stützt die
+Schlussfolgerung aus Kapitel~\ref{ch:comparison}: Drei der fünf
+wichtigsten Merkmale basieren auf dem Gyroskop, darunter das mit
+Abstand wichtigste (\texttt{gyr\_std} mit $23{,}6\,\%$, gefolgt von
+\texttt{acc\_skew}, \texttt{gyr\_range}, \texttt{gyr\_max} und
+\texttt{acc\_max}). Über alle 18~Merkmale entfallen $62{,}3\,\%$ der
+Gesamtwichtigkeit auf gyroskopbasierte Größen. Da die Merkmale je
+zur Hälfte aus beiden Sensoren stammen, entspräche ein Anteil von
+$50\,\%$ dem Fall ohne jeden Vorzug; der beobachtete Wert belegt
+somit den Beitrag der sechsten Achse.
 
 \section{Modell~3: 1D-CNN}
 \label{sec:cnn}
@@ -1190,7 +1194,7 @@ Die Bewertung erfolgt auf einem subjektunabhängigen Testsplit
 Genauigkeit $99{,}6\,\%$. Im Vergleich zum Random Forest sinkt die
 Anzahl übersehener Stürze von 105 auf 18 (False Negatives), während
 die Anzahl der Fehlalarme von 215 auf 39 (False Positives) zurückgeht.
-Das Modell umfasst 45\,601~Parameter (178\,KB) und konvergiert
+Das Modell umfasst 61\,601~Parameter und konvergiert
 innerhalb von 30~Epochen ohne Anzeichen von Overfitting, wie die
 Trainingskurven in Abbildung~\ref{fig:training} belegen.
 
@@ -1237,7 +1241,7 @@ mittels des TensorFlow-Lite-Konverters in ein vollständig
 int8-quantisiertes Modell überführt. Die Quantisierung verwendet einen
 repräsentativen Kalibrierungsdatensatz aus 200~zufällig gewählten
 Trainingsfenstern. Das resultierende \texttt{.tflite}-Modell hat eine
-Größe von lediglich \textbf{64\,KB} und passt damit problemlos in den
+Größe von lediglich \textbf{77{,}6\,KB} und passt damit problemlos in den
 4\,MB großen Flash-Speicher des ESP32-C6. Die Inferenzzeit für ein
 einzelnes Fenster wird auf dem Zielprozessor im Bereich weniger
 Millisekunden erwartet, sodass eine Echtzeitklassifikation bei der
@@ -1318,16 +1322,48 @@ ob ein beobachteter Leistungsabfall dem Datensatzwechsel an sich oder
 den spezifischen Eigenschaften eines Datensatzes zuzuschreiben ist.
 
 Bei der Aufbereitung von KFall wurde die Zuordnung der Aufgaben-IDs
-zu den Klassen (T01--T21 = ADL, T22--T36 = Sturz) nicht aus der
-Dokumentation übernommen, sondern empirisch überprüft: Der Median der
-Spitzenbeschleunigung steigt exakt ab T22 sprunghaft an
-($1{,}84$\,g gegenüber $4{,}62$\,g), was die angenommene Grenze
-bestätigt. Bemerkenswert ist dabei eine deutliche Überlappung der
-Wertebereiche -- einzelne ADL-Aufgaben (T20: $4{,}49$\,g) erreichen
-höhere Spitzenwerte als einzelne Sturzarten (T35: $2{,}23$\,g). Dies
-belegt unmittelbar, weshalb rein schwellwertbasierte Verfahren keine
-hohe Spezifität erreichen können, und begründet den Einsatz von
-Modellen, die den gesamten zeitlichen Verlauf auswerten.
+zu den Klassen zunächst aus einer Spitzenwertanalyse abgeleitet und
+mit T01--T21 = ADL, T22--T36 = Sturz angenommen. Diese Annahme
+erwies sich später als \emph{falsch}. Die dem Datensatz beiliegenden
+Labeldateien (\texttt{label\_data\_new}) weisen die Sturzarten
+ausdrücklich als F01~$=$~Aufgabe~20 bis F15~$=$~Aufgabe~34 aus. Die
+tatsächliche Grenze lautet damit:
+
+\begin{center}
+T20--T34 $=$ Sturz \qquad T01--T19 und T35--T36 $=$ ADL
+\end{center}
+
+Die Korrektur wurde auf zwei unabhängigen Wegen abgesichert. Zum
+einen enthalten die Labeldateien für jede Sturzaufzeichnung einen
+manuell annotierten \texttt{Fall\_impact\_frame}; dieser stimmt bei
+T20 auf einen Abtastwert genau mit dem gemessenen
+Beschleunigungsmaximum überein (Bild 278 laut Label gegenüber 277
+gemessen), bei T22 hingegen nicht. Zum anderen bestätigt die
+Spitzenwertanalyse die verschobene Grenze eindeutig:
+
+\begin{center}
+T19: $1{,}56$\,g \quad\textbar\quad \textbf{T20: $4{,}52$\,g} \quad\textbar\quad
+T34: $4{,}75$\,g \quad\textbar\quad \textbf{T35: $2{,}13$\,g}
+\end{center}
+
+Von den 5075~Aufnahmen waren durch die ursprüngliche Annahme
+606~Trials falsch zugeordnet ($12\,\%$): 320~Sturzaufnahmen
+(T20, T21) galten als ADL, 286~ADL-Aufnahmen (T35, T36) als Sturz.
+
+Bemerkenswert ist, dass genau diese Fehlzuordnung zuvor als Beleg
+missdeutet worden war. Die scheinbare Überlappung der Wertebereiche
+-- eine ADL-Aufgabe (T20: $4{,}49$\,g) mit höheren Spitzen als eine
+Sturzart (T35: $2{,}23$\,g) -- war kein Beleg für die Schwäche
+schwellwertbasierter Verfahren, sondern der Fehler selbst: T20
+\emph{ist} ein Sturz und T35 \emph{ist} eine Alltagsaktivität. Nach
+der Korrektur trennen sich die Verteilungen sauber.
+
+Dieser Vorfall unterstreicht das im Projekt verfolgte Prinzip,
+Annahmen empirisch zu prüfen -- und zugleich dessen Grenze: Die
+Spitzenwertanalyse allein war nicht hinreichend, da eine um zwei
+Positionen verschobene Grenze ebenfalls einen plausiblen Sprung
+erzeugt. Erst der Abgleich mit den originalen Annotationsdateien
+brachte Gewissheit.
 
 Es wurden zwei Bedingungen verglichen:
 
@@ -1361,7 +1397,7 @@ fassen die Ergebnisse zusammen.
 SisFall (Referenz, 50\,Hz) & Hüfte & Test       & 98,0\,\% & 99,7\,\% & 99,6\,\% \\
 SisFall (20\,Hz)           & Hüfte & Test       & 96,8\,\% & 99,3\,\% & 99,1\,\% \\
 \midrule
-KFall                      & unt.\ Rücken & Zero-Shot  & 83,5\,\% & 94,9\,\% & 91,7\,\% \\
+KFall                      & unt.\ Rücken & Zero-Shot  & 100,0\,\% & 99,5\,\% & 99,6\,\% \\
                            &              & Fine-Tuned & 96,4\,\% & 96,9\,\% & 96,8\,\% \\
 \midrule
 UMAFall                    & Taille   & Zero-Shot  & 42,2\,\% & 97,4\,\% & 92,6\,\% \\
@@ -1402,7 +1438,7 @@ Verglichen mit den vorangegangenen Transferversuchen liefert
 FallAllD ein überraschendes Ergebnis: Obwohl die Abtastrate
 ($238$\,Hz) höher ist als bei jedem anderen hier betrachteten
 Datensatz, fällt die Zero-Shot-Sensitivität auf lediglich
-$13{,}6\,\%$ -- deutlich unter dem KFall-Ergebnis ($83{,}5\,\%$)
+$13{,}6\,\%$ -- deutlich unter dem KFall-Ergebnis ($100{,}0\,\%$)
 und sogar unter dem UMAFall-Ergebnis ($42{,}2\,\%$). Fine-Tuning
 hebt die Sensitivität auf $84{,}6\,\%$ bei einer Spezifität von
 $98{,}7\,\%$, was zeigt, dass die Daten ausreichend Information
@@ -1475,7 +1511,7 @@ alle drei externen Datensätze zusammen.
 \toprule
 \textbf{Datensatz} & \textbf{Hz} & \textbf{Bereich} & \textbf{Sensor} & \textbf{ZS-Se} & \textbf{FT-Se} \\
 \midrule
-KFall    & 100 & $\pm 16$\,g & Xsens MTw    & 83,5\,\% & 96,4\,\% \\
+KFall    & 100 & $\pm 16$\,g & Xsens MTw    & 100,0\,\% & 100,0\,\% \\
 UMAFall  &  20 & $\pm 16$\,g & SensorTag    & 42,2\,\% & 92,2\,\% \\
 FallAllD & 238 & $\pm\;\;8$\,g & LSM9DS1   & 13,6\,\% & 84,6\,\% \\
 \bottomrule
@@ -1532,30 +1568,30 @@ Klassifikation per Definition ein Fehlalarm.
 \toprule
 \textbf{Aktivität} & \textbf{Fenster} & \textbf{FP} & \textbf{Rate} & \textbf{max. $p$} \\
 \midrule
-Joggen                  & 259 & 46 & 17,76\,\% & 1,000 \\
-Tür öffnen              & 563 & 32 &  5,68\,\% & 1,000 \\
-Gehen                   & 713 & 38 &  5,33\,\% & 1,000 \\
-Treppe abwärts          & 259 & 12 &  4,63\,\% & 1,000 \\
-Treppe aufwärts         & 255 &  8 &  3,14\,\% & 1,000 \\
-Hinlegen (Bett)         & 624 & 18 &  2,88\,\% & 1,000 \\
-Arme heben              & 567 & 13 &  2,29\,\% & 1,000 \\
+Joggen                  & 259 & 40 & 15,44\,\% & 0,999 \\
+Gehen                   & 713 & 26 &  3,65\,\% & 0,999 \\
+Tür öffnen              & 563 & 19 &  3,37\,\% & 1,000 \\
+Treppe abwärts          & 259 &  7 &  2,70\,\% & 0,997 \\
+Treppe aufwärts         & 255 &  6 &  2,35\,\% & 0,999 \\
+Hinlegen (Bett)         & 624 & 13 &  2,08\,\% & 1,000 \\
+Arme heben              & 567 & 11 &  1,94\,\% & 1,000 \\
 Telefonieren            & 610 & 11 &  1,80\,\% & 1,000 \\
-Sitzen/Aufstehen        & 699 & 11 &  1,57\,\% & 1,000 \\
-Hüpfen                  & 584 &  8 &  1,37\,\% & 0,996 \\
-Bücken                  & 648 &  8 &  1,23\,\% & 1,000 \\
-Klatschen               & 548 &  3 &  0,55\,\% & 0,996 \\
+Sitzen/Aufstehen        & 699 & 12 &  1,72\,\% & 1,000 \\
+Hüpfen                  & 584 & 10 &  1,71\,\% & 0,999 \\
+Bücken                  & 648 &  7 &  1,08\,\% & 0,999 \\
+Klatschen               & 548 &  3 &  0,55\,\% & 0,925 \\
 \midrule
-\textbf{Gesamt}         & \textbf{6329} & \textbf{208} & \textbf{3,29\,\%} & --- \\
+\textbf{Gesamt}         & \textbf{6329} & \textbf{165} & \textbf{2,61\,\%} & --- \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Bei einer Gesamtrate von $3{,}29\,\%$ entspricht dies hochgerechnet
-rund $118$~Fehlalarmen pro Stunde ununterbrochener Aufzeichnung. Ein
+Bei einer Gesamtrate von $2{,}61\,\%$ entspricht dies hochgerechnet
+rund $94$~Fehlalarmen pro Stunde ununterbrochener Aufzeichnung. Ein
 solches System wäre im Alltag nicht einsetzbar.
 
 Aufschlussreich ist die Verteilung: Die höchsten Raten treten bei
-\emph{Joggen} ($17{,}76\,\%$), \emph{Gehen} ($5{,}33\,\%$) und
+\emph{Joggen} ($15{,}44\,\%$), \emph{Gehen} ($3{,}65\,\%$) und
 \emph{Treppensteigen} auf -- also genau bei jenen Aktivitäten, bei
 denen der Fuß wiederholt auf den Boden aufschlägt. Der Fersenauftritt
 erzeugt am Knöchel einen kurzen, steilen Beschleunigungsimpuls, der
@@ -1699,17 +1735,16 @@ deutlichsten, wenn der Aufprall nahe der Fenstermitte liegt.
 \subsubsection{Ergebnis}
 
 Tabelle~\ref{tab:voting} stellt die Regeln für das unveränderte
-SisFall-Modell und für das auf Knöcheldaten feinabgestimmte Modell
-gegenüber (Entscheidungsschwelle jeweils $0{,}9$, subjektunabhängiger
-Testsatz).
+SisFall-Modell und für ein auf Knöcheldaten feinabgestimmtes Modell
+gegenüber. Der Testsatz umfasst 47~Sturzaufzeichnungen; die
+Sensitivität bezeichnet den Anteil der Aufzeichnungen, in denen
+mindestens einmal Alarm ausgelöst wurde.
 
 \begin{table}[H]
 \centering
 \caption{N-von-M-Voting bei $0{,}2$\,s Schrittweite,
-         Entscheidungsschwelle $0{,}9$. Se bezeichnet den Anteil der
-         Sturzaufzeichnungen, in denen mindestens einmal Alarm
-         ausgelöst wurde; FP/Std die Fehlalarme pro Stunde
-         ADL-Aufzeichnung.}
+         Entscheidungsschwelle $0{,}5$. FP/Std bezeichnet die
+         Alarm\-ereignisse je Stunde ADL-Aufzeichnung.}
 \label{tab:voting}
 \small
 \begin{tabularx}{\textwidth}{l C{1.6cm} C{1.7cm} C{1.6cm} C{1.7cm}}
@@ -1718,42 +1753,78 @@ Testsatz).
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}
 \textbf{Regel} & \textbf{Se} & \textbf{FP/Std} & \textbf{Se} & \textbf{FP/Std} \\
 \midrule
-1-von-1  & 40,4\,\% & 212,4 & 100,0\,\% & 280,8 \\
-2-von-3  & 29,8\,\% & 100,0 &  97,9\,\% & 124,6 \\
-3-von-5  & 17,0\,\% &  63,2 &  93,6\,\% &  73,7 \\
-\textbf{5-von-7} & \textbf{8,5\,\%} & \textbf{29,8} & \textbf{83,0\,\%} & \textbf{21,1} \\
-7-von-10 &  6,4\,\% &  10,5 &  68,1\,\% &  10,5 \\
+1-von-1  & 51,1\,\% & 235,2 & 61,7\,\% & 265,0 \\
+2-von-3  & 42,5\,\% & 114,1 & 51,1\,\% & 143,9 \\
+3-von-5  & 31,9\,\% &  64,9 & 46,8\,\% & 100,0 \\
+5-von-7  &  6,4\,\% &  24,6 & 27,7\,\% &  42,1 \\
+7-von-10 &  2,1\,\% &  10,5 &  6,4\,\% &  14,0 \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Für das feinabgestimmte Modell reduziert die Regel \emph{5-von-7} die
-Fehlalarmrate von $1192$ auf $21{,}1$ pro Stunde -- eine Verringerung
-um $98\,\%$ -- bei einem Rückgang der Sensitivität von $100\,\%$ auf
-$83{,}0\,\%$. Dies stellt für den vorgesehenen Einsatzzweck einen
-vertretbaren Kompromiss dar.
+Die Regel wirkt wie erwartet: Von \emph{1-von-1} zu \emph{5-von-7}
+sinken die Fehlalarme des angepassten Modells von $265$ auf $42$ je
+Stunde, eine Verringerung um $84\,\%$. Der Preis ist jedoch erheblich
+-- die Sensitivität fällt von $61{,}7\,\%$ auf $27{,}7\,\%$
+(95\,\%-KI $[16{,}9; 41{,}8]$), also um mehr als die Hälfte.
 
-\subsubsection{Voting ersetzt keine Domänenanpassung}
+\subsubsection{Kein tragfähiger Betriebspunkt auf diesen Daten}
 
-Der Vergleich beider Modellspalten in Tabelle~\ref{tab:voting} führt
-zu einem Befund, der über die reine Parameterwahl hinausgeht. Beim
-Übergang von \emph{1-von-1} zu \emph{5-von-7} verliert das
-Basismodell $78\,\%$ seiner Sensitivität ($40{,}4\,\%$ auf
-$8{,}5\,\%$), das feinabgestimmte Modell hingegen nur $17\,\%$
-($100\,\%$ auf $83{,}0\,\%$).
+Betrachtet man die Kombinationen aus Regel und Schwelle, findet sich
+keine, die für den Einsatz genügen würde. Selbst die mildeste Regel
+erreicht lediglich $61{,}7\,\%$ Sensitivität bei $265$~Fehlalarmen je
+Stunde; strengere Regeln senken die Fehlalarme, verfehlen aber
+zunehmend die Stürze. Ein System, das jeden dritten Sturz erkennt,
+ist ebenso unbrauchbar wie eines, das im Minutentakt Alarm schlägt.
+
+Die Ursache liegt nicht in der Voting-Regel, sondern in der Qualität
+des zugrunde liegenden Modells: Die Anpassung erfolgte auf den
+UMAFall-Knöcheldaten, die mit $20$\,Hz nativer Abtastrate und
+lediglich 157~Sturzaufzeichnungen die schwächste aller hier
+verwendeten Domänen darstellen. Die Voting-Regel kann nur
+plausibilisieren, was das Modell überhaupt erkennt.
+
+Für die Firmware folgt daraus: Die Parameter $N$, $M$ und die
+Entscheidungsschwelle sind auf den noch zu erhebenden Fußdaten neu zu
+bestimmen. Die hier ermittelten Werte belegen die Wirksamkeit des
+Verfahrens dem Grunde nach, taugen aber nicht als
+Auslegungsvorgabe.
+
+\subsubsection{Voting setzt Domänenanpassung voraus}
+
+Unabhängig vom Betriebspunkt zeigt der Vergleich beider
+Modellspalten einen Zusammenhang, der über die Parameterwahl
+hinausgeht. Beim Übergang von \emph{1-von-1} zu \emph{5-von-7}
+verliert das Basismodell $88\,\%$ seiner Sensitivität ($51{,}1\,\%$
+auf $6{,}4\,\%$), das feinabgestimmte Modell hingegen $55\,\%$
+($61{,}7\,\%$ auf $27{,}7\,\%$). In absoluten Zahlen bleiben vom
+Basismodell drei von 47~Stürzen übrig, vom angepassten dreizehn.
 
 Die Erklärung liegt in der zeitlichen Struktur der Ausgaben. Ein
 nicht angepasstes Modell erzeugt auf fremden Daten \emph{vereinzelte},
 zeitlich unzusammenhängende Positivmeldungen; diese werden durch die
 Voting-Regel systematisch verworfen. Ein domänenangepasstes Modell
 erzeugt dagegen einen \emph{zusammenhängenden} Block positiver
-Fenster um das Aufprallereignis, der die Regel zuverlässig passiert.
+Fenster um das Aufprallereignis, der die Regel eher passiert.
 
 Die zeitliche Plausibilisierung ist damit kein Ersatz für die
 Domänenanpassung, sondern setzt diese voraus. Für die Firmware ergibt
 sich daraus eine klare Reihenfolge: zuerst Fine-Tuning auf
 Fußdaten, danach Voting zur Unterdrückung der verbleibenden
 Fehlalarme.
+
+\medskip
+\noindent\textit{Methodische Anmerkung:} Ein früherer Durchlauf
+dieses Versuchs wies für das angepasste Modell eine Sensitivität von
+$100\,\%$ bei \emph{1-von-1} und $83\,\%$ bei \emph{5-von-7} aus.
+Diese Werte beruhten auf einer fehlerhaften Fensterbeschriftung: Alle
+Fenster einer Sturzaufzeichnung galten dort als Sturz, auch jene, die
+lediglich das Gehen zum Versuchsort enthielten. Das Modell lernte
+dadurch die Regel \glqq jedes Fenster aus einer Sturzaufnahme ist
+ein Sturz\grqq{}, was die Erkennung auf Aufzeichnungsebene künstlich
+erleichtert. Nach der Korrektur -- nur das Fenster mit dem
+tatsächlichen Aufprall gilt als Sturz -- ergeben sich die oben
+berichteten, deutlich niedrigeren Werte.
 
 \subsection{Hard-Negative-Training}
 \label{sec:hardneg}
@@ -1806,7 +1877,11 @@ unerkannter Sturz kann dazu führen, dass eine hilflose Person über
 Stunden unentdeckt bleibt; ein Fehlalarm verursacht demgegenüber
 lediglich Aufwand. Hinzu kommt ein systematisches Argument: Die
 zeitliche Plausibilisierung nach Abschnitt~\ref{sec:voting} reduziert
+<<<<<<< HEAD
 Fehlalarme bereits um $98\,\%$ -- für einen verpassten Sturz gibt es
+=======
+Fehlalarme um bis zu $84\,\%$ -- für einen verpassten Sturz gibt es
+>>>>>>> c8cf0c53 (Update all results to corrected runs; revise voting section and firmware parameters)
 dagegen keine nachgelagerte Korrekturmöglichkeit. Fehlalarme lassen
 sich also auf einer späteren Verarbeitungsstufe abfangen,
 Detektionslücken nicht.
@@ -1826,6 +1901,108 @@ Vorzeichenwechsel dieser Größenordnung ist ein Warnsignal für
 Zufallsschwankung und war der Anlass, den Versuch kreuzvalidiert zu
 wiederholen.
 
+<<<<<<< HEAD
+=======
+\subsection{Zielgruppenvalidierung mit WEDA-FALL}
+\label{sec:zielgruppe}
+
+Alle bisher herangezogenen Datensätze bestehen überwiegend aus jungen
+Probanden -- KFall weist ein Durchschnittsalter von 24~Jahren auf,
+FallAllD 32~Jahre, UMAFall 26~Jahre. Das Vorhaben richtet sich
+jedoch an ältere und demenziell veränderte Personen. Ob sich deren
+Alltagsbewegungen für ein auf jungen Kohorten trainiertes Modell
+anders darstellen, blieb damit offen.
+
+WEDA-FALL~\cite{wedafall2023} schließt diese Lücke teilweise: Der
+Datensatz umfasst neben 14~jüngeren Teilnehmern (20--46~Jahre)
+auch 11~Personen zwischen 77 und 95~Jahren, aufgezeichnet mit
+identischer Hardware (Fitbit Sense, Handgelenk) und nach identischem
+Protokoll.
+
+\subsubsection{Einschränkungen}
+
+Zwei Eigenschaften begrenzen die Aussagekraft. Erstens haben die
+älteren Teilnehmer aus Sicherheitsgründen \emph{keine} Stürze
+ausgeführt; für diese Gruppe ist ausschließlich die Fehlalarmrate
+bewertbar. Zweitens haben sie nur sechs der elf Alltagsaktivitäten
+durchgeführt (D01, D03, D04, D09, D10, D11). Ein Vergleich über alle
+Aktivitäten wäre daher unfair; die Auswertung beschränkt sich auf
+die gemeinsame Teilmenge.
+
+Hinzu kommt eine Besonderheit der Aufzeichnung: Die Zeitstempel des
+Fitbit Sense sind stark ungleichmäßig -- Bündel von Abtastwerten im
+Abstand von 1--2\,ms wechseln sich mit Lücken bis zu 93\,ms ab, die
+effektive Rate schwankt je nach Datei zwischen 40 und 50\,Hz. Die
+Daten wurden daher anhand der Zeitstempel auf ein regelmäßiges
+50-Hz-Raster interpoliert; eine Behandlung der Zeilen als
+gleichmäßig abgetastet hätte die Zeitstruktur des Aufpralls
+verfälscht.
+
+\subsubsection{Ergebnis}
+
+\begin{table}[H]
+\centering
+\caption{Fehlalarme je Stunde auf den gemeinsamen Aktivitäten
+         beider Altersgruppen, Zero-Shot mit dem SisFall-Modell.}
+\label{tab:zielgruppe}
+\small
+\begin{tabularx}{0.85\textwidth}{X C{2.4cm} C{2.4cm} C{2.2cm}}
+\toprule
+\textbf{Schwelle} & \textbf{Ältere} & \textbf{Jüngere} & \textbf{Verhältnis} \\
+\midrule
+$0{,}50$ & 296,5 & 114,5 & 2,59\,$\times$ \\
+$0{,}90$ & 200,9 &  53,2 & 3,78\,$\times$ \\
+$0{,}99$ & 142,1 &  25,6 & 5,56\,$\times$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Auf den ersten Blick liegt die Fehlalarmrate der älteren Gruppe um
+den Faktor $3{,}8$ höher. Die Aufschlüsselung nach Bewegungsart
+zeigt jedoch, dass dieser Unterschied nahezu vollständig auf eine
+einzige Aktivität zurückgeht.
+
+\begin{table}[H]
+\centering
+\caption{Fehlalarmrate je Bewegungsart (Entscheidungsschwelle
+         $0{,}9$).}
+\label{tab:zielgruppe_bewegung}
+\small
+\begin{tabularx}{0.85\textwidth}{l X C{2.1cm} C{2.1cm}}
+\toprule
+\textbf{Code} & \textbf{Bewegung} & \textbf{Ältere} & \textbf{Jüngere} \\
+\midrule
+D01 & Gehen                & 0,70\,\% & 0,41\,\% \\
+D03 & Treppe auf/ab        & 0,81\,\% & 1,98\,\% \\
+D04 & Hinsetzen/Aufstehen  & 0,47\,\% & 0,00\,\% \\
+D09 & Auf Tisch schlagen   & 3,91\,\% & 5,19\,\% \\
+\textbf{D10} & \textbf{Klatschen} & \textbf{25,51\,\%} & \textbf{2,54\,\%} \\
+D11 & Tür öffnen           & 4,35\,\% & 0,77\,\% \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Beim Gehen und beim Treppensteigen -- den für eine Einlegesohle
+maßgeblichen Bewegungen -- unterscheiden sich beide Gruppen kaum;
+beim Treppensteigen schneidet die ältere Gruppe sogar besser ab. Der
+gesamte Unterschied konzentriert sich auf das Klatschen
+($25{,}51\,\%$ gegenüber $2{,}54\,\%$).
+
+Eine plausible Erklärung ist, dass ältere Personen mit
+eingeschränkter Feinmotorik ausladender und mit stärkeren
+Abbremsstößen klatschen, was am Handgelenk kurze, sturzähnliche
+Impulse erzeugt. Für das vorliegende Vorhaben ist dieser Befund
+allerdings von untergeordneter Bedeutung: Er betrifft eine
+Handgelenksbewegung, während der Sensor am Fuß sitzt.
+
+\textbf{Schlussfolgerung:} Es findet sich \emph{kein} Beleg dafür,
+dass Alltagsbewegungen älterer Menschen für das Modell grundsätzlich
+schwerer zu unterscheiden wären. Der beobachtete Unterschied geht auf
+ein einzelnes, für die Zielanwendung nicht relevantes
+Bewegungsmuster zurück. Diese Einordnung wäre bei einem Vergleich
+allein über die aggregierte Fehlalarmrate verborgen geblieben.
+
+>>>>>>> c8cf0c53 (Update all results to corrected runs; revise voting section and firmware parameters)
 \subsection{Interpretation}
 
 Die Kombination der Experimente -- einschließlich des FallAllD-Versuchs
@@ -1836,7 +2013,7 @@ ableitbar gewesen wäre.
 \textbf{Erstens gelingt der Transfer zwischen qualitativ hochwertigen
 Datensätzen gut -- aber nur bei ähnlicher Sensorhardware.} Auf KFall
 erreicht das unveränderte SisFall-Modell ohne jede Anpassung eine
-Sensitivität von $83{,}5\,\%$ bei einer Spezifität von $94{,}9\,\%$ --
+Sensitivität von $100{,}0\,\%$ bei einer Spezifität von $99{,}5\,\%$ --
 und das, obwohl sich Probandenkollektiv (Südkorea statt Kolumbien),
 Sensorhardware (Xsens MTw~Awinda statt ADXL345/ITG3200) und
 Aufnahmeprotokoll vollständig unterscheiden. FallAllD hingegen erreicht
@@ -1873,17 +2050,17 @@ grundsätzliche Machbarkeit der fußnahen Anbringung stützt.
 
 \textbf{Fünftens ist Transfer Learning in allen Konfigurationen
 wirksam}, wobei der erforderliche Umfang mit der Ausgangsqualität
-skaliert: Auf KFall genügt eine Verbesserung um $12{,}9$~Prozentpunkte
-($83{,}5\,\%$ auf $96{,}4\,\%$), auf FallAllD sind es
+skaliert: Auf KFall ist ohnehin keine Anpassung nötig
+($100{,}0\,\%$ bereits im Zero-Shot), auf FallAllD sind es
 $71{,}0$~Prozentpunkte ($13{,}6\,\%$ auf $84{,}6\,\%$). In keiner
 Konfiguration verschlechterte sich dabei die Spezifität.
 
 \textbf{Sechstens ist die Falsch-Positiv-Rate bei fußnaher Anbringung
 das kritischere Problem als die Sensitivität.} Der Test auf
 fußnahen ADL-Daten (Abschnitt~\ref{sec:fptest}) ergibt ohne Anpassung
-$3{,}29\,\%$ Fehlalarme, konzentriert auf Aktivitäten mit
-wiederholtem Bodenkontakt (Joggen: $17{,}76\,\%$, Gehen:
-$5{,}33\,\%$). Da das Modell diese Fehlklassifikationen mit maximaler
+$2{,}61\,\%$ Fehlalarme, konzentriert auf Aktivitäten mit
+wiederholtem Bodenkontakt (Joggen: $15{,}44\,\%$, Gehen:
+$3{,}65\,\%$). Da das Modell diese Fehlklassifikationen mit maximaler
 Konfidenz ($p = 1{,}000$) trifft, greift eine reine Anhebung der
 Entscheidungsschwelle zu kurz. Erforderlich sind stattdessen
 domänenspezifische Trainingsdaten sowie ergänzende Mechanismen wie
@@ -1906,10 +2083,11 @@ Merkmalsrepräsentation.
 \textbf{Achtens ergänzen sich zeitliche Plausibilisierung und
 Domänenanpassung, ersetzen einander aber nicht.} Die
 N-von-M-Regel \emph{5-von-7} senkt die Fehlalarmrate des
-angepassten Modells um $98\,\%$ bei einem Sensitivitätsverlust von
-$17$~Prozentpunkten (Abschnitt~\ref{sec:voting}). Auf das nicht
-angepasste Modell angewendet, vernichtet dieselbe Regel jedoch
-$78\,\%$ der Sensitivität. Der Grund liegt in der zeitlichen
+angepassten Modells um $84\,\%$, kostet dabei aber $55\,\%$ seiner
+Sensitivität (Abschnitt~\ref{sec:voting}). Auf das nicht angepasste
+Modell angewendet, vernichtet dieselbe Regel $88\,\%$ der
+Sensitivität -- von 47~Stürzen bleiben dort drei erkannt, beim
+angepassten Modell dreizehn. Der Grund liegt in der zeitlichen
 Struktur der Modellausgaben: Nur ein domänenangepasstes Modell
 erzeugt um den Aufprall herum einen zusammenhängenden Block
 positiver Fenster, den die Regel passieren lässt. Für die Umsetzung
@@ -1987,29 +2165,42 @@ Der Zwischenschritt kostet keinen zusätzlichen Aufwand bei der
 Datenerhebung, da KFall bereits vorliegt, verbessert die
 Anpassungsfähigkeit des Modells jedoch erheblich.
 
-\textbf{Mehrstufige Alarmauslösung mit konkreten Parametern.} Aus
-Abschnitt~\ref{sec:voting} ergibt sich ein unmittelbar umsetzbarer
-Betriebspunkt für die Firmware:
+\textbf{Mehrstufige Alarmauslösung.} Aus Abschnitt~\ref{sec:voting}
+ergibt sich die Struktur der Alarmlogik, nicht jedoch deren
+Parametrierung. Tabelle~\ref{tab:firmwarevorgabe} trennt daher
+zwischen den bereits belastbar bestimmten Größen und jenen, die auf
+den Pilotdaten festzulegen sind.
 
 \begin{table}[H]
 \centering
-\caption{Firmware-Vorgaben für die Alarmlogik.}
+\caption{Firmware-Vorgaben. Die Parameter der Alarmlogik sind
+         vorläufig, da sie bislang nur an UMAFall-Knöcheldaten
+         bestimmt wurden.}
 \label{tab:firmwarevorgabe}
 \small
-\begin{tabularx}{0.8\textwidth}{X l}
+\begin{tabularx}{0.95\textwidth}{X l l}
 \toprule
-\textbf{Parameter} & \textbf{Wert} \\
+\textbf{Parameter} & \textbf{Wert} & \textbf{Status} \\
 \midrule
-Abtastrate des Sensors (ODR)      & $\geq 100$\,Hz, DLPF aktiv \\
-Messbereich                        & $\pm 16$\,g \\
-Modelleingang                      & $100 \times 6$ ($2$\,s @ $50$\,Hz) \\
-Inferenzintervall                  & $200$\,ms \\
-Ringpuffer für Entscheidungen      & 7 \\
-Entscheidungsschwelle              & $0{,}9$ \\
-Alarmbedingung                     & $\geq 5$ von 7 positiv \\
+Abtastrate des Sensors (ODR)  & $\geq 100$\,Hz, DLPF aktiv & belegt \\
+Messbereich                   & $\pm 16$\,g & belegt \\
+Modelleingang                 & $100 \times 6$ ($2$\,s @ $50$\,Hz) & belegt \\
+Inferenzintervall             & $200$\,ms & belegt \\
+\midrule
+Ringpuffer $M$                & 3 bis 7 & vorläufig \\
+Alarmschwelle $N$             & 2 bis 5 & vorläufig \\
+Entscheidungsschwelle         & $0{,}5$ bis $0{,}9$ & vorläufig \\
 \bottomrule
 \end{tabularx}
 \end{table}
+
+Die vier oberen Größen folgen aus physikalischen Erwägungen und den
+Kontrollexperimenten und sind unabhängig von der Zieldomäne gültig.
+Die drei unteren beschreiben einen Kompromiss zwischen Sensitivität
+und Fehlalarmrate, der von der Leistungsfähigkeit des angepassten
+Modells abhängt. Auf den UMAFall-Knöcheldaten ließ sich kein
+befriedigender Betriebspunkt finden; die Werte sind daher nach der
+Pilotdatenerhebung neu zu bestimmen.
 
 Bei einem Inferenzintervall von $200$\,ms und einer geschätzten
 Inferenzzeit von etwa $10$\,ms ergibt sich eine Rechenlast von rund
@@ -2017,9 +2208,6 @@ $5\,\%$ -- der ESP32-C6 ist damit deutlich unterfordert, sodass
 ausreichend Reserven für Funkübertragung und Energiesparmodi
 verbleiben. Die konkrete Inferenzzeit ist nach der
 Hardware-Integration zu verifizieren.
-
-\section{Nächste Schritte}
-\label{sec:nextsteps}
 
 \subsection{Einordnung der durchgeführten Kontrollexperimente}
 
@@ -2071,11 +2259,13 @@ Projektzeitraum geplant:
       Fine-Tuning des CNN: SisFall $\rightarrow$ KFall $\rightarrow$
       Pilotdaten, um die Domänenlücke zwischen den öffentlichen
       Datensätzen und der Zielhardware systematisch zu schließen.
-\item \textbf{Verifikation der Alarmlogik auf Zielhardware:}
-      Die in Tabelle~\ref{tab:firmwarevorgabe} festgelegten Parameter
-      der Voting-Regel sind nach der Pilotdatenerhebung auf den
-      tatsächlichen Fußdaten nachzujustieren, da sie bislang an
-      UMAFall-Knöcheldaten bestimmt wurden.
+\item \textbf{Bestimmung der Alarmlogik:} Die in
+      Tabelle~\ref{tab:firmwarevorgabe} als vorläufig
+      gekennzeichneten Parameter ($N$, $M$, Entscheidungsschwelle)
+      sind auf den Pilotdaten festzulegen. Auf den
+      UMAFall-Knöcheldaten ließ sich kein Betriebspunkt finden, der
+      zugleich ausreichende Sensitivität und vertretbare
+      Fehlalarmraten erreicht.
 \item \textbf{Long-Lie-Erkennung:} Implementierung einer zweiten
       Erkennungsstufe, die nach einem erkannten Sturz die
       Bewegungslosigkeit überwacht und bei anhaltender Liegeposition
