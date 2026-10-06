@@ -160,7 +160,7 @@ static void listeZeigen() {
   while (f) {
     Serial.printf("  %-28s %7u Byte  (~%u s)\n",
                   f.name(), (unsigned)f.size(),
-                  (unsigned)(f.size() / 26 / ABTASTRATE));
+                  (unsigned)(f.size() / 36 / ABTASTRATE));
     n++;
     f = wurzel.openNextFile();
   }
