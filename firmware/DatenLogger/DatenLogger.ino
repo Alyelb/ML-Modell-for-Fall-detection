@@ -10,11 +10,15 @@
  *
  * Ablauf einer Aufnahme:
  *   1. Board per USB anschliessen, Serial Monitor oeffnen
- *   2. Sensorposition und Aktivitaet eingeben (Menue)
- *   3. "r" -> 10 s Vorlauf zum Anlegen -> Aufnahme laeuft
- *   4. USB abziehen (Betrieb ueber Akku), Aktivitaet ausfuehren
- *   5. USB wieder anschliessen, "d" -> CSV erscheint im Monitor
- *   6. Text in eine .csv-Datei kopieren
+ *   2. Position (p) und Aktivitaet (a) waehlen
+ *   3. Serial Monitor schliessen, Board an Powerbank/Akku haengen
+ *   4. BOOT-Taste druecken -> 5 s Vorlauf -> Aufnahme laeuft
+ *      (alternativ "r" im Monitor, dann 10 s Vorlauf)
+ *   5. Aktivitaet ausfuehren (bei Stuerzen mehrere Wiederholungen
+ *      in einer Datei, je ca. 5 s ruhig liegen bleiben)
+ *   6. BOOT-Taste erneut -> Aufnahme beendet, Datei geschlossen
+ *      ERST DANN die Stromversorgung wechseln!
+ *   7. Auslesen: tools/pilot_download.py (oder "d" im Monitor)
  *
  * Befehle:
  *   r  Aufnahme starten (mit Vorlauf)
@@ -38,6 +42,8 @@
 #define ABTASTRATE     100          // Hz
 #define VORLAUF_S      10           // Sekunden zum Anlegen
 #define MAX_DAUER_S    120          // Sicherheitsgrenze je Aufnahme
+#define PIN_TASTER     9            // BOOT-Taste des ESP32-C6-DevKit
+#define VORLAUF_TASTER_S 5          // Vorlauf beim Start per Taste
 
 // ---------------------------------------------------------------
 #define MPU_ADDR       0x68
@@ -139,6 +145,7 @@ static void menue() {
   Serial.println("  d  als CSV ausgeben     l  auflisten");
   Serial.println("  p  Position             a  Aktivitaet");
   Serial.println("  x  Speicher loeschen    ?  Menue");
+  Serial.println("  BOOT-Taste: Start / Stopp ohne Monitor");
   Serial.println("===================================");
 }
 
@@ -160,14 +167,14 @@ static void listeZeigen() {
 // ---------------------------------------------------------------
 //  AUFNAHME
 // ---------------------------------------------------------------
-static void aufnahmeStarten() {
+static void aufnahmeStarten(int vorlauf_s) {
   if (laeuft) { Serial.println("Laeuft bereits."); return; }
 
   Serial.printf("\nPosition: %s | Aktivitaet: %s\n",
                 POSITIONEN[pos_idx], AKTIVITAETEN[akt_idx]);
   Serial.printf("Vorlauf %d s -- jetzt anlegen und USB abziehen.\n",
-                VORLAUF_S);
-  for (int i = VORLAUF_S; i > 0; i--) {
+                vorlauf_s);
+  for (int i = vorlauf_s; i > 0; i--) {
     Serial.printf("  %d ...\n", i);
     delay(1000);
   }
@@ -224,7 +231,7 @@ static void alsCsvAusgeben() {
 // ---------------------------------------------------------------
 static void befehl(char c) {
   switch (c) {
-    case 'r': case 'R': aufnahmeStarten(); break;
+    case 'r': case 'R': aufnahmeStarten(VORLAUF_S); break;
     case 's': case 'S': aufnahmeBeenden(); break;
     case 'd': case 'D':
       if (laeuft) { Serial.println("Erst beenden (s)."); break; }
@@ -255,6 +262,7 @@ void setup() {
   Serial.begin(115200);
   delay(1500);
 
+  pinMode(PIN_TASTER, INPUT_PULLUP);
   Wire.begin(PIN_SDA, PIN_SCL);
   Wire.setClock(400000);
 
@@ -279,6 +287,17 @@ void setup() {
 void loop() {
   while (Serial.available()) befehl(Serial.read());
 
+  // BOOT-Taste: Start/Stopp ohne Serial Monitor (entprellt, Flanke)
+  static bool     taste_vorher = HIGH;
+  static uint32_t taste_ms     = 0;
+  bool taste = digitalRead(PIN_TASTER);
+  if (taste == LOW && taste_vorher == HIGH && millis() - taste_ms > 300) {
+    taste_ms = millis();
+    if (laeuft) aufnahmeBeenden();
+    else        aufnahmeStarten(VORLAUF_TASTER_S);
+  }
+  taste_vorher = taste;
+
   if (!laeuft) return;
 
   uint32_t jetzt = millis();
@@ -293,6 +312,9 @@ void loop() {
                (unsigned long)(jetzt - start_ms),
                roh[0], roh[1], roh[2], roh[4], roh[5], roh[6]);
   proben++;
+  // Regelmaessig auf den Flash schreiben: geht die Stromversorgung
+  // waehrend der Aufnahme verloren, fehlt hoechstens 1 s.
+  if (proben % ABTASTRATE == 0) datei.flush();
 
   if (proben % (ABTASTRATE * 10) == 0) {
     Serial.printf("  %lu s aufgezeichnet\n",
