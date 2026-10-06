@@ -30,7 +30,10 @@ hardware.
 │   ├── 06_progressiv        Progressive fine-tuning (single split)
 │   ├── 07_progressiv_cv     Same, 5-fold cross-validated
 │   ├── 08_hardneg_cv        Hard-negative weighting, cross-validated
-│   └── 09_pilotdaten        Recordings from the target hardware
+│   ├── 09_pilotdaten        Recordings from the target hardware,
+│   │                        base vs. lower-limb model
+│   └── 10_fussdomaene       Placement curve (9 body positions + foot),
+│                            training with leg/foot data
 │
 ├── firmware/                Arduino sketches for ESP32-C6 + MPU-6050/6500
 │   ├── CleverSole/          Full detector: steps, inference, voting,
@@ -226,6 +229,50 @@ would have hidden this.
 
 ---
 
+## Foot domain (in progress)
+
+The central open question: how well does a model trained on trunk data
+transfer to a foot-mounted sensor? No public dataset contains falls
+recorded at the foot, so the question is answered by combining
+sources that each cover one aspect (notebook `10_fussdomaene`,
+report chapter 6).
+
+**What the foot signal looks like.** Two insole datasets recorded with
+the same commercial insole IMU (Moticon OpenGo), no falls, no relevant
+clipping:
+
+| Dataset | Duration | median \|a\| | 99th pct. \|a\| |
+|---|---|---|---|
+| Smart-Insole v1.0 | 92 min | 1.04 g | 5.1 g |
+| ImbalanSense | 4.7 h | 1.05 g | 4.4 g |
+
+Ordinary gait at the sole exceeds 4 g in one sample out of a hundred,
+and single axes reach ±13–16 g without any fall. A fixed impact
+threshold is not viable at the foot, and ±16 g is required there even
+though ±8 g suffices at the waist.
+
+**Partner recordings.** The existing insole prototype records at 10 Hz
+with ±2 g and no gyroscope: 16.7 % of all samples are clipped, and the
+magnitude tops out at exactly √3 · 2 g = 3.46 g. Unsuitable for
+training; the project's own logger (`firmware/DatenLogger`) records at
+100 Hz, ±16 g, ±2000 °/s.
+
+**Experiments (results pending):**
+
+1. *Placement curve.* CAPPIMU records the same falls simultaneously at
+   nine body positions, so position is the only variable. The base
+   model is applied zero-shot to each, plus false-alarm rates on both
+   insole datasets.
+2. *Lower-limb training.* SisFall → KFall → shin falls (CAPPIMU),
+   with and without insole ADL (ImbalanSense), 5-fold
+   subject-independent CV. Smart-Insole is never trained on and serves
+   as an external false-alarm test including elderly and Parkinson's
+   participants.
+3. *Pilot recordings* with the target hardware at waist and foot,
+   evaluated with both the base and the lower-limb model.
+
+---
+
 ## Datasets
 
 | Dataset | Subjects | Hz | Position | Role |
@@ -236,6 +283,13 @@ would have hidden this.
 | [FallAllD](https://doi.org/10.1109/JSEN.2019.2966342) | 15 | 238 | 3 positions | Sensor transfer |
 | [UniMiB-SHAR](https://doi.org/10.3390/app7101101) | 30 | 50 | Pocket | 3-axis check |
 | WEDA-FALL | 25 | 50 | Wrist | Target group |
+| [CAPPIMU](https://github.com/quiqi/CAPPIMU) | 30 | 50 | 9 positions incl. shin | Placement curve, leg training |
+| [ImbalanSense](https://doi.org/10.5281/zenodo.20924766) | 40 | 100 | Insole | Foot ADL, training + FP test (CC BY 4.0) |
+| [Smart-Insole v1.0](https://doi.org/10.3390/s21082821) | 29 | 100 | Insole | External FP test only (non-commercial licence) |
+
+Checked and not used: AnkFall (ankle, requested, pending),
+HuGaDB (foot, but ±2 g), UP-Fall (ankle, ≈18 Hz),
+MobiAct (pocket, adds nothing over the above).
 
 Two documentation discrepancies worth noting for anyone reusing these
 datasets:
@@ -244,8 +298,9 @@ datasets:
   files list F01 as task 20; the annotated `Fall_impact_frame` matches
   the measured acceleration peak at T20 to within one sample, and not
   at T22. The earlier assumption mislabelled 606 of 5075 recordings.
-- **The Smart Insole Database contains no IMU channels** despite its
-  documentation. All 30 published files hold only 38 CapSense pressure
+- **The Smart Insole Database (GitHub) contains no IMU channels**
+  despite its documentation. Not to be confused with the
+  *Smart-Insole Dataset v1.0* (HMU BMI Lab), which does. All 30 published files hold only 38 CapSense pressure
   electrodes and force-plate readings.
 
 No public dataset contains falls recorded from a foot-mounted IMU.
@@ -315,6 +370,8 @@ serial output goes to the UART pins instead of USB).
 - [x] Cross-validated method comparison
 - [x] Firmware: sensor, step detection, deep sleep, BLE
 - [ ] TFLite deployment on device
+- [x] Foot-domain datasets: loaders and evaluation notebook
+- [ ] Placement curve and lower-limb training (notebook 10)
 - [ ] Pilot recordings at waist and foot
 - [ ] Voting parameters from pilot data
 - [ ] Long-lie detection

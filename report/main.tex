@@ -33,6 +33,9 @@
 
 % -------------- Graphics & floats ----------------
 \usepackage{graphicx}
+\usepackage{xcolor}
+% Platzhalter fuer noch ausstehende Ergebnisse (vor Abgabe entfernen)
+\newcommand{\offen}[1]{\textcolor{red}{\textbf{[offen}\ifx&#1&\else: #1\fi\textbf{]}}}
 \usepackage{float}
 \usepackage{caption}
 \captionsetup{font=small,labelfont=bf}
@@ -248,6 +251,11 @@ der in der Aufgabenstellung genannten Kriterien (Sensorposition,
 Achsenkonfiguration und Abtastrate, Klassenabdeckung und Probanden\-diversität,
 Verfügbarkeit) und begründet die Auswahl der Primär- und
 Sekundärdatensätze für die Modellentwicklung.
+Kapitel~\ref{ch:verlauf} dokumentiert die Modellentwicklung auf den
+öffentlichen Datensätzen einschließlich Transfer-, Fehlalarm- und
+Kreuzvalidierungsexperimenten. Kapitel~\ref{ch:fuss} untersucht die
+Übertragung auf die Fußposition mit zusätzlichen Sohlen- und
+Beindatensätzen sowie Aufnahmen der Zielhardware.
 
 %------------------------------------------------------------------
 %------------------------------------------------------------------
@@ -2271,6 +2279,333 @@ Projektzeitraum geplant:
       Bewegungslosigkeit überwacht und bei anhaltender Liegeposition
       ($> 60$\,s) einen Notfallalarm auslöst.
 \end{enumerate}
+
+Die Schritte~2 und~3 werden in Kapitel~\ref{ch:fuss} aufgegriffen und
+um beinnahe öffentliche Datensätze erweitert.
+
+%------------------------------------------------------------------
+\chapter{Übertragung auf die Fußposition}
+\label{ch:fuss}
+
+Kapitel~\ref{ch:verlauf} hat gezeigt, dass das auf SisFall trainierte
+Modell auf rumpfnahe Datensätze gut überträgt, an fußnahen Positionen
+jedoch deutlich an Leistung verliert: Am Knöchel (UMAFall) erreichte
+der Zero-Shot-Transfer lediglich $19{,}4\,\%$ Sensitivität, und es
+ließ sich kein Betriebspunkt mit vertretbarer Fehlalarmrate finden.
+Offen blieb, ob diese Schwäche auf die Position selbst oder auf die
+geringe Abtastrate von UMAFall ($20$\,Hz) zurückgeht.
+
+Dieses Kapitel geht der Frage mit zusätzlichen Datenquellen nach, die
+nach Abschluss der Datensatzbewertung (Kapitel~\ref{ch:datasets})
+erschlossen wurden. Es beantwortet drei Teilfragen:
+
+\begin{enumerate}
+\item Wie unterscheiden sich die Beschleunigungssignale am Fuß von
+      denen am Rumpf?
+\item Wie verändert sich die Leistung des Basismodells, wenn derselbe
+      Sturz an verschiedenen Körperpositionen gemessen wird?
+\item Lässt sich die Leistung durch Training mit beinnahen Daten
+      verbessern, und schaden zusätzliche Fußdaten ohne Stürze der
+      Sensitivität, wie es beim Hard-Negative-Training
+      (Abschnitt~\ref{sec:hardneg}) beobachtet wurde?
+\end{enumerate}
+
+Ein öffentlicher Datensatz, der Stürze mit einem am Fuß getragenen
+\ac{IMU} enthält, existiert nach dem Stand der Recherche nicht. Die
+Fragen werden daher durch die Kombination mehrerer Quellen beantwortet,
+die jeweils einen Teilaspekt abdecken.
+
+%------------------------------------------------------------------
+\section{Ergänzende Datenquellen}
+\label{sec:fuss_daten}
+
+Tabelle~\ref{tab:fuss_daten} fasst die zusätzlich geprüften Quellen
+zusammen. Ausschlaggebend für die Aufnahme waren die Sensorposition
+(möglichst nahe am Fuß), ein Messbereich ohne relevantes Clipping, eine
+Abtastrate von mindestens $50$\,Hz sowie ein vorhandenes Gyroskop.
+
+\begin{table}[H]
+\centering
+\caption{Zusätzlich geprüfte Datenquellen für die Fußposition.}
+\label{tab:fuss_daten}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabularx}{\textwidth}{
+>{\raggedright\arraybackslash}p{2.0cm}
+>{\raggedright\arraybackslash}p{2.6cm}
+>{\raggedright\arraybackslash}p{2.2cm}
+>{\centering\arraybackslash}p{1.1cm}
+>{\raggedright\arraybackslash}X
+}
+\toprule
+\textbf{Quelle} & \textbf{Position / Sensor} & \textbf{Rate, Bereich}
+& \textbf{Stürze} & \textbf{Verwendung} \\
+\midrule
+Partnerdaten Clever-Sole
+& Sohle, 3 Personen, 28 Aufnahmen
+& $10$\,Hz, $\pm 2$\,g, ohne Gyro
+& nein
+& Signalanalyse (Abschnitt~\ref{sec:fuss_partner}) \\
+
+Smart-Insole v1.0 \cite{smartinsole2021}
+& Sohle (Moticon OpenGo), 13 Erwachsene, 9 Ältere, 7 Parkinson
+& $100$\,Hz, kein Clipping, Gyro
+& nein
+& externer Fehlalarmtest; nie im Training (Lizenz nur nicht-kommerziell) \\
+
+ImbalanSense \cite{imbalansense2026}
+& Sohle (Moticon OpenGo), 40 Personen, Gehen mit VR-induzierter
+  Gleichgewichtsstörung
+& $100$\,Hz, $\pm 16$\,g, Gyro
+& nein
+& Fehlalarmtest und Negativdaten im Training (CC~BY~4.0) \\
+
+CAPPIMU \cite{cappimu2024}
+& 9 Positionen gleichzeitig, u.\,a.\ oberes Schienbein (beidseitig)
+& $50$\,Hz, $\pm 16$\,g, Gyro
+& ja
+& Positionskurve, Training mit Beindaten \\
+
+\midrule
+AnkFall \cite{ankfall2021}
+& Knöchel, 21 Personen
+& $50$\,Hz, $\pm 16$\,g, ohne Gyro
+& ja
+& angefragt (Nutzungsvereinbarung), noch nicht verfügbar \\
+
+HuGaDB \cite{hugadb2017}
+& Fuß, Schienbein, Oberschenkel
+& $\pm 2$\,g
+& nein
+& verworfen: Messbereich clippt am Fuß \\
+
+UP-Fall \cite{upfall2019}
+& u.\,a.\ Knöchel
+& $\approx 18$\,Hz
+& ja
+& verworfen: Abtastrate wie UMAFall zu gering \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Die \emph{Smart-Insole v1.0}-Daten sind nicht mit der in
+Kapitel~\ref{ch:datasets} erwähnten, gleichnamigen GitHub-Datenbank zu
+verwechseln, die ausschließlich Druckdaten enthält. Beide
+Sohlendatensätze (Smart-Insole, ImbalanSense) wurden mit demselben
+kommerziellen Sohlensystem aufgezeichnet, dessen \ac{IMU} in der Sohle
+sitzt und damit der Zielposition am nächsten kommt; beide enthalten
+jedoch keine Stürze. CAPPIMU enthält Stürze, misst aber am Schienbein.
+Erst die Kombination deckt Sturz- und Fußdomäne ab.
+
+\textbf{Beschriftung in CAPPIMU.} Die Klasse \emph{fall} umfasst die
+gesamte Sturzsitzung von etwa $160$\,s mit wiederholten Stürzen
+einschließlich des Aufstehens. Einzelne Aufpralle wurden daher auf der
+Brustposition als Beschleunigungsspitzen über $2{,}5$\,g im Mindestabstand
+von $4$\,s detektiert und über die gemeinsamen Zeitstempel auf alle
+übrigen Positionen übertragen; dort wird der Aufprall innerhalb von
+$\pm 0{,}5$\,s auf das lokale Maximum verfeinert. Für Proband~1 ergeben
+sich so 21 Aufpralle in regelmäßigem Abstand von etwa $7$\,s. Der Rest
+der Sturzsitzung wird verworfen, damit er weder als Sturz noch als
+\ac{ADL} Label-Rauschen erzeugt. Die Beschriftung ist eine Näherung
+und wird als Einschränkung berücksichtigt.
+
+%------------------------------------------------------------------
+\section{Signalanalyse der Partnerdaten}
+\label{sec:fuss_partner}
+
+Der Projektpartner stellte 28 Aufnahmen von drei Personen
+(rund $67$\,min) zur Verfügung, die mit dem bestehenden
+Sohlenprototyp aufgezeichnet wurden. Die Analyse ergab drei
+Einschränkungen, die eine Verwendung für Training oder Validierung
+ausschließen:
+
+\begin{itemize}
+\item \textbf{Abtastrate $10$\,Hz.} Ein Aufprall von $50$--$150$\,ms
+      Dauer fällt zwischen zwei Abtastwerte. Nach
+      Abschnitt~\ref{sec:samplingrate} und den Ergebnissen auf UMAFall
+      ($20$\,Hz) ist die Impulsform damit nicht rekonstruierbar.
+\item \textbf{Messbereich $\pm 2$\,g mit Clipping.} $16{,}7\,\%$ aller
+      Abtastwerte liegen auf mindestens einer Achse am Bereichsende
+      ($19{,}6$\,m/s$^2$). Der Betrag erreicht maximal $3{,}46$\,g,
+      exakt $\sqrt{3}\cdot 2$\,g, also gleichzeitige Sättigung aller
+      drei Achsen.
+\item \textbf{Kein Gyroskop.} Die mitgelieferten Neigungswinkel sind
+      aus der Beschleunigung abgeleitet und enthalten keine
+      zusätzliche Information.
+\end{itemize}
+
+Trotz Clipping überschreitet der Beschleunigungsbetrag beim normalen
+Gehen rund $37$-mal pro Minute $2{,}5$\,g. Ein schwellwertbasiertes
+Verfahren wäre damit selbst bei abgeschnittenem Signal nicht
+einsetzbar. Für künftige Aufnahmen gelten die Vorgaben aus
+Tabelle~\ref{tab:firmwarevorgabe}; der eigens entwickelte Datenlogger
+setzt sie um ($100$\,Hz, $\pm 16$\,g, $\pm 2000\,^{\circ}/\mathrm{s}$,
+eine Datei je Aufnahme mit Positions- und Aktivitätskennung).
+
+%------------------------------------------------------------------
+\section{Signalcharakteristik am Fuß}
+\label{sec:fuss_signal}
+
+Tabelle~\ref{tab:fuss_signal} vergleicht den Beschleunigungsbetrag
+der beiden Sohlendatensätze. Beide wurden ohne relevantes Clipping
+aufgezeichnet und zeigen übereinstimmend, dass bereits normale
+Fortbewegung am Fuß Werte erreicht, die am Rumpf typisch für einen
+Aufprall sind.
+
+\begin{table}[H]
+\centering
+\caption{Beschleunigungsbetrag $|a|$ an der Fußsohle (Alltagsaktivitäten,
+         keine Stürze).}
+\label{tab:fuss_signal}
+\small
+\begin{tabularx}{0.95\textwidth}{X r r r}
+\toprule
+\textbf{Datensatz} & \textbf{Dauer} & \textbf{Median} & \textbf{99.~Perz.} \\
+\midrule
+Smart-Insole v1.0 (Gehen, TUG) & $92$\,min & $1{,}04$\,g & $5{,}1$\,g \\
+ImbalanSense (Gehen, VR, Störung) & $4{,}7$\,h & $1{,}05$\,g & $4{,}4$\,g \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+In jeder hundertsten Abtastung liegt der Betrag damit über $4$\,g und
+weit oberhalb der Impact-Schwelle des Schwellwertverfahrens
+($2{,}0$\,g, Abschnitt~\ref{sec:threshold}). Die Einzelachsen erreichen in beiden
+Datensätzen bis zu $\pm 13$--$16$\,g, ohne dass ein Sturz vorliegt.
+Das bestätigt die Beobachtung aus dem Falsch-Positiv-Test
+(Abschnitt~\ref{sec:fptest}), dass Fersenaufsätze die eigentliche
+Fehlerquelle sind, nun an Daten aus der tatsächlichen Zielposition.
+Zugleich begründet es nachträglich den Messbereich von $\pm 16$\,g:
+Während am Rumpf $\pm 8$\,g genügen, würde ein kleinerer Bereich an der
+Sohle bereits beim Gehen sättigen, wie die Partnerdaten zeigen.
+
+%------------------------------------------------------------------
+\section{Positionskurve}
+\label{sec:fuss_kurve}
+
+CAPPIMU erfasst dieselben Stürze und Alltagsaktivitäten gleichzeitig an
+neun Körperpositionen. Damit lässt sich der Einfluss der Position
+isolieren: Sensorik, Probanden, Bewegungen und Abtastrate sind
+identisch, nur der Messort ändert sich. Das Basismodell wird ohne
+Anpassung auf jede Position angewendet. Ergänzt werden die beiden
+Sohlendatensätze, für die nur die Fehlalarmrate bestimmbar ist.
+
+\begin{table}[H]
+\centering
+\caption{Zero-Shot-Leistung des Basismodells je Position (CAPPIMU,
+         30 Probanden; Fuß: Smart-Insole und ImbalanSense).
+         Schwelle $0{,}5$, ADL-Fenster mit $1$\,s Schrittweite.}
+\label{tab:fuss_kurve}
+\small
+\begin{tabularx}{0.95\textwidth}{X c c c c}
+\toprule
+\textbf{Position} & \textbf{Se} & \textbf{FP/h}
+& \textbf{Peak Sturz} & \textbf{Peak ADL (P99)} \\
+\midrule
+Kopf          & \offen{} & \offen{} & \offen{} & \offen{} \\
+Brust         & \offen{} & \offen{} & \offen{} & \offen{} \\
+Oberarm       & \offen{} & \offen{} & \offen{} & \offen{} \\
+Handgelenk    & \offen{} & \offen{} & \offen{} & \offen{} \\
+Hosentasche   & \offen{} & \offen{} & \offen{} & \offen{} \\
+Schienbein li.& \offen{} & \offen{} & \offen{} & \offen{} \\
+Schienbein re.& \offen{} & \offen{} & \offen{} & \offen{} \\
+\midrule
+Fuß (ImbalanSense) & -- & \offen{} & -- & \offen{} \\
+Fuß (Smart-Insole) & -- & \offen{} & -- & \offen{} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\offen{Interpretation nach Auswertung von Notebook~10: Verlauf von Se
+und FP/h entlang der Positionen; Abstand zwischen Sturz- und
+ADL-Spitzen.}
+
+%------------------------------------------------------------------
+\section{Training mit beinnahen Daten}
+\label{sec:fuss_training}
+
+Verglichen werden vier Varianten, die alle vom Basismodell ausgehen:
+
+\begin{table}[H]
+\centering
+\caption{Trainingsvarianten für die Fußdomäne.}
+\label{tab:fuss_varianten}
+\small
+\begin{tabularx}{0.95\textwidth}{l X}
+\toprule
+\textbf{Variante} & \textbf{Training} \\
+\midrule
+A  & Basismodell (SisFall), unverändert \\
+K  & A, Fine-Tuning auf KFall (Zwischenstufe aus Abschnitt~\ref{sec:progressive}) \\
+B1 & K, Fine-Tuning auf CAPPIMU-Schienbein \\
+B2 & K, Fine-Tuning auf CAPPIMU-Schienbein \emph{und} ImbalanSense-Sohle \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Bewertet wird fünffach und subjektunabhängig kreuzvalidiert: In jeder
+Falte sind die Testprobanden von CAPPIMU und ImbalanSense vom Training
+ausgeschlossen. Smart-Insole wird in keiner Falte trainiert und dient
+als vollständig externer Fehlalarmtest, der zusätzlich ältere Personen
+und Parkinson-Patienten umfasst. Zur Begrenzung der Rechenzeit werden
+die ADL-Trainingsfenster je Falte auf $20\,000$ (CAPPIMU) bzw.\
+$10\,000$ (ImbalanSense) gekappt; bewertet wird stets auf allen
+Testfenstern.
+
+Der Vergleich B2 gegen B1 prüft gezielt, ob zusätzliche Fußdaten ohne
+Stürze die Sensitivität senken. Anders als beim Hard-Negative-Training
+werden hier keine Fenster höher gewichtet, sondern Daten einer neuen
+Domäne ergänzt.
+
+\begin{table}[H]
+\centering
+\caption{Ergebnisse der Trainingsvarianten (gepoolt über fünf Falten).}
+\label{tab:fuss_training}
+\small
+\begin{tabularx}{\textwidth}{l X c c c}
+\toprule
+& \multicolumn{2}{c}{\textbf{Schienbein (CAPPIMU)}} & \multicolumn{2}{c}{\textbf{FP/h Sohle}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+\textbf{Var.} & \textbf{Se (95\,\%-KI)} & \textbf{Sp}
+& \textbf{ImbalanSense} & \textbf{Smart-Insole} \\
+\midrule
+A  & \offen{} & \offen{} & \offen{} & \offen{} \\
+K  & \offen{} & \offen{} & \offen{} & \offen{} \\
+B1 & \offen{} & \offen{} & \offen{} & \offen{} \\
+B2 & \offen{} & \offen{} & \offen{} & \offen{} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\offen{Gepaarte Vergleiche B1 vs.\ K und B2 vs.\ B1 (Se, Sp) mit
+95\,\%-Konfidenzintervall und Anzahl gewonnener Falten.}
+
+%------------------------------------------------------------------
+\section{Pilotversuch auf der Zielhardware}
+\label{sec:fuss_pilot}
+
+Abschließend werden beide Modelle (Basis und Lower-Limb, d.\,h.\ B2
+auf allen Daten trainiert) auf Aufnahmen mit dem eigenen Prototyp
+(ESP32-C6, MPU-6500) angewendet. Aufgezeichnet wird an zwei Positionen:
+an der Taille, wo der Unterschied zu SisFall allein in der Hardware
+liegt, und am Fuß, wo Hardware und Position zugleich abweichen.
+Simulierte Stürze erfolgen auf eine Matte (vorwärts, auf die Knie,
+seitlich, rückwärts, Ausrutschen), ergänzt um Gehen, Treppen,
+Hinsetzen, Springen und Aufheben eines Gegenstands.
+
+Die Aufnahmen stammen von einer einzigen Person. Eine
+subjektunabhängige Bewertung ist damit nicht möglich; der Versuch
+ist als Machbarkeitsnachweis zu verstehen. Die Zero-Shot-Auswertung
+bleibt gültig, da keines der Modelle diese Daten gesehen hat.
+
+\offen{Ergebnisse aus Notebook~09: Se und FP/h je Position und Modell.}
+
+%------------------------------------------------------------------
+\section{Zwischenfazit}
+\label{sec:fuss_fazit}
+
+\offen{Nach Auswertung zu ergänzen.}
 
 %------------------------------------------------------------------
 %   BIBLIOGRAPHY
