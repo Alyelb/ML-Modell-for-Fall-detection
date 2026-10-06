@@ -4,15 +4,18 @@ Eine Person, zwei Positionen: **WAIST** (Gürtel vorn, wie SisFall) und
 **FOOT_INSOLE** (Schuhoberseite/Sohle, fest fixiert). Sensorausrichtung
 markieren und in allen Aufnahmen gleich lassen.
 
-## Ablauf je Aufnahme
+## Ablauf (Handy, empfohlen)
 
-1. USB am PC, Serial Monitor (115200): `p` bis Position stimmt, `a` bis
-   Aktivität stimmt.
-2. Monitor schließen, Board auf Powerbank/Akku umstecken.
-3. **BOOT** drücken → 5 s Vorlauf → Aufnahme läuft.
-4. 3 s ruhig stehen, dann 3× leicht auf den Sensor klopfen (Sync mit Video).
-5. Aktivität ausführen (Video mitlaufen lassen).
-6. **BOOT** drücken → Datei geschlossen. Erst danach umstecken.
+1. Board mit Akku/Powerbank am Körper bzw. im Schuh befestigen.
+2. Handy-App öffnen ("Serial Bluetooth Terminal" bzw. "Bluefruit
+   Connect" → UART), mit **CleverSole-Logger** verbinden, `?` senden.
+3. Je Aktivität: `a`/`b` bis die Aktivität stimmt → `r` → 10 s Vorlauf →
+   3 s ruhig stehen, 3× auf den Sensor klopfen → Aktivität ausführen →
+   `s`. Nach 120 s stoppt die Aufnahme automatisch.
+4. Position wechseln mit `p`. `l` zeigt alle Dateien und den Speicher.
+
+Ohne Handy: wie oben per Serial Monitor wählen, dann mit der
+**BOOT**-Taste starten/stoppen.
 
 Speicher reicht für einige Minuten. Nach jeder Position auslesen:
 `python tools/pilot_download.py --loeschen`, dann den neuen Ordner in

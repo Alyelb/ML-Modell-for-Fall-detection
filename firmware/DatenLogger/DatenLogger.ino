@@ -8,7 +8,14 @@
  * das Board bereits filtern, waere die Vorverarbeitung nicht mehr
  * identisch mit der Trainingspipeline.
  *
- * Ablauf einer Aufnahme:
+ * Bedienung per Handy (Bluetooth, empfohlen):
+ *   App "Serial Bluetooth Terminal" (Android) bzw. "Bluefruit
+ *   Connect" -> UART (iOS), Geraet "CleverSole-Logger" verbinden.
+ *   Dieselben Befehle wie im Serial Monitor (siehe unten). So lassen
+ *   sich mehrere Aktivitaeten nacheinander aufnehmen, ohne das Board
+ *   abzunehmen. Ausgelesen wird weiterhin per USB.
+ *
+ * Ablauf einer Aufnahme per USB:
  *   1. Board per USB anschliessen, Serial Monitor oeffnen
  *   2. Position (p) und Aktivitaet (a) waehlen
  *   3. Serial Monitor schliessen, Board an Powerbank/Akku haengen
@@ -27,7 +34,7 @@
  *   l  Aufnahmen auflisten
  *   x  Speicher loeschen
  *   p  Position waehlen
- *   a  Aktivitaet waehlen
+ *   a  naechste Aktivitaet    b  vorherige Aktivitaet
  *   ?  Menue
  */
 
@@ -35,6 +42,11 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include <Preferences.h>   // Auswahl ueberlebt Neustart/Stromwechsel
+#include <stdarg.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
 static Preferences prefs;
 
@@ -47,6 +59,7 @@ static Preferences prefs;
 #define MAX_DAUER_S    120          // Sicherheitsgrenze je Aufnahme
 #define PIN_TASTER     9            // BOOT-Taste des ESP32-C6-DevKit
 #define VORLAUF_TASTER_S 5          // Vorlauf beim Start per Taste
+#define GERAETENAME    "CleverSole-Logger"
 
 // ---------------------------------------------------------------
 #define MPU_ADDR       0x68
@@ -87,6 +100,77 @@ static File     datei;
 static uint32_t start_ms = 0;
 static uint32_t proben   = 0;
 static uint32_t naechste = 0;
+
+// ---------------------------------------------------------------
+//  BLE  --  Nordic UART Service (Bedienung per Handy)
+// ---------------------------------------------------------------
+#define NUS_SVC "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define NUS_RX  "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"   // Handy -> Board
+#define NUS_TX  "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"   // Board -> Handy
+
+static BLECharacteristic *chrTX = nullptr;
+static volatile bool ble_verbunden = false;
+
+// Befehle vom Handy kommen im BLE-Task an. Ausgefuehrt werden sie erst
+// in loop(), damit Dateizugriffe nicht aus zwei Tasks gleichzeitig
+// erfolgen.
+static char ble_puffer[32];
+static volatile uint8_t ble_kopf = 0, ble_ende = 0;
+
+class ServerCB : public BLEServerCallbacks {
+  void onConnect(BLEServer*) override { ble_verbunden = true; }
+  void onDisconnect(BLEServer *srv) override {
+    ble_verbunden = false;
+    srv->startAdvertising();
+  }
+};
+
+class RxCB : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *c) override {
+    String d = c->getValue();
+    for (unsigned i = 0; i < d.length(); i++) {
+      uint8_t n = (ble_kopf + 1) % sizeof(ble_puffer);
+      if (n == ble_ende) break;              // Puffer voll
+      ble_puffer[ble_kopf] = d[i];
+      ble_kopf = n;
+    }
+  }
+};
+
+// Ausgabe gleichzeitig seriell und an das Handy
+static void out(const char *fmt, ...) {
+  char buf[200];
+  va_list ap; va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  Serial.print(buf);
+  if (ble_verbunden && chrTX) {
+    size_t len = strlen(buf);
+    for (size_t off = 0; off < len; off += 160) {
+      size_t n = (len - off > 160) ? 160 : (len - off);
+      chrTX->setValue((uint8_t*)(buf + off), n);
+      chrTX->notify();
+      delay(4);
+    }
+  }
+}
+
+static void bleStarten() {
+  BLEDevice::init(GERAETENAME);
+  BLEServer *srv = BLEDevice::createServer();
+  srv->setCallbacks(new ServerCB());
+  BLEService *svc = srv->createService(NUS_SVC);
+  chrTX = svc->createCharacteristic(NUS_TX, BLECharacteristic::PROPERTY_NOTIFY);
+  chrTX->addDescriptor(new BLE2902());
+  BLECharacteristic *rx = svc->createCharacteristic(NUS_RX,
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  rx->setCallbacks(new RxCB());
+  svc->start();
+  BLEAdvertising *adv = BLEDevice::getAdvertising();
+  adv->addServiceUUID(NUS_SVC);
+  adv->setScanResponse(true);
+  BLEDevice::startAdvertising();
+}
 
 // ---------------------------------------------------------------
 //  I2C
@@ -135,50 +219,52 @@ static bool mpuInit() {
 //  MENUE
 // ---------------------------------------------------------------
 static void menue() {
-  Serial.println();
-  Serial.println("=========== DatenLogger ===========");
-  Serial.printf("  Sensor    : 0x%02X\n", chip_id);
-  Serial.printf("  Position  : %s\n", POSITIONEN[pos_idx]);
-  Serial.printf("  Aktivitaet: %s\n", AKTIVITAETEN[akt_idx]);
-  Serial.printf("  Speicher  : %u von %u kB belegt\n",
+  out("\n");
+  out("=========== DatenLogger ===========\n");
+  out("  Sensor    : 0x%02X\n", chip_id);
+  out("  Position  : %s\n", POSITIONEN[pos_idx]);
+  out("  Aktivitaet: %s\n", AKTIVITAETEN[akt_idx]);
+  out("  Speicher  : %u von %u kB belegt\n",
                 (unsigned)(LittleFS.usedBytes()/1024),
                 (unsigned)(LittleFS.totalBytes()/1024));
-  Serial.println("-----------------------------------");
-  Serial.println("  r  Aufnahme starten     s  beenden");
-  Serial.println("  d  als CSV ausgeben     l  auflisten");
-  Serial.println("  p  Position             a  Aktivitaet");
-  Serial.println("  x  Speicher loeschen    ?  Menue");
-  Serial.println("  BOOT-Taste: Start / Stopp ohne Monitor");
-  Serial.println("===================================");
+  out("-----------------------------------\n");
+  out("  r  Aufnahme starten     s  beenden\n");
+  out("  d  als CSV ausgeben     l  auflisten\n");
+  out("  p  Position             a/b  Aktivitaet +/-\n");
+  out("  x  Speicher loeschen    ?  Menue\n");
+  out("  BOOT-Taste: Start / Stopp ohne Monitor\n");
+  out("  Handy: Bluetooth \"%s\" (%s)\n", GERAETENAME,
+      ble_verbunden ? "verbunden" : "nicht verbunden");
+  out("===================================\n");
 }
 
 static void listeZeigen() {
-  Serial.println("\nGespeicherte Aufnahmen:");
+  out("\nGespeicherte Aufnahmen:\n");
   File wurzel = LittleFS.open("/");
   File f = wurzel.openNextFile();
   int n = 0;
   while (f) {
-    Serial.printf("  %-28s %7u Byte  (~%u s)\n",
+    out("  %-28s %7u Byte  (~%u s)\n",
                   f.name(), (unsigned)f.size(),
                   (unsigned)(f.size() / 36 / ABTASTRATE));
     n++;
     f = wurzel.openNextFile();
   }
-  if (!n) Serial.println("  (keine)");
+  if (!n) out("  (keine)\n");
 }
 
 // ---------------------------------------------------------------
 //  AUFNAHME
 // ---------------------------------------------------------------
 static void aufnahmeStarten(int vorlauf_s) {
-  if (laeuft) { Serial.println("Laeuft bereits."); return; }
+  if (laeuft) { out("Laeuft bereits.\n"); return; }
 
-  Serial.printf("\nPosition: %s | Aktivitaet: %s\n",
+  out("\nPosition: %s | Aktivitaet: %s\n",
                 POSITIONEN[pos_idx], AKTIVITAETEN[akt_idx]);
-  Serial.printf("Vorlauf %d s -- jetzt anlegen und USB abziehen.\n",
+  out("Vorlauf %d s -- jetzt anlegen und USB abziehen.\n",
                 vorlauf_s);
   for (int i = vorlauf_s; i > 0; i--) {
-    Serial.printf("  %d ...\n", i);
+    out("  %d ...\n", i);
     delay(1000);
   }
 
@@ -186,7 +272,7 @@ static void aufnahmeStarten(int vorlauf_s) {
   snprintf(name, sizeof(name), "/%02d_%s_%s.csv",
            aufnahme_nr++, POSITIONEN[pos_idx], AKTIVITAETEN[akt_idx]);
   datei = LittleFS.open(name, FILE_WRITE);
-  if (!datei) { Serial.println("Datei konnte nicht angelegt werden."); return; }
+  if (!datei) { out("Datei konnte nicht angelegt werden.\n"); return; }
 
   // Kopfzeile mit allen Angaben, die zur Auswertung noetig sind
   datei.printf("# position=%s activity=%s fs=%d range_acc=16g "
@@ -199,7 +285,7 @@ static void aufnahmeStarten(int vorlauf_s) {
   proben   = 0;
   start_ms = millis();
   naechste = start_ms;
-  Serial.println(">>> AUFNAHME LAEUFT <<<");
+  out(">>> AUFNAHME LAEUFT <<<\n");
 }
 
 static void aufnahmeBeenden() {
@@ -207,7 +293,7 @@ static void aufnahmeBeenden() {
   laeuft = false;
   uint32_t dauer = millis() - start_ms;
   datei.close();
-  Serial.printf("\nBeendet: %lu Proben in %.1f s (%.1f Hz)\n",
+  out("\nBeendet: %lu Proben in %.1f s (%.1f Hz)\n",
                 (unsigned long)proben, dauer / 1000.0f,
                 proben * 1000.0f / dauer);
   menue();
@@ -237,25 +323,31 @@ static void befehl(char c) {
     case 'r': case 'R': aufnahmeStarten(VORLAUF_S); break;
     case 's': case 'S': aufnahmeBeenden(); break;
     case 'd': case 'D':
-      if (laeuft) { Serial.println("Erst beenden (s)."); break; }
+      if (laeuft) { out("Erst beenden (s).\n"); break; }
+      if (ble_verbunden) out("Ausgabe nur ueber USB (pilot_download.py).\n");
       alsCsvAusgeben();
       break;
     case 'l': case 'L': listeZeigen(); break;
     case 'p': case 'P':
       pos_idx = (pos_idx + 1) % N_POS;
       prefs.putInt("pos", pos_idx);
-      Serial.printf("Position: %s\n", POSITIONEN[pos_idx]);
+      out("Position: %s\n", POSITIONEN[pos_idx]);
       break;
     case 'a': case 'A':
       akt_idx = (akt_idx + 1) % N_AKT;
       prefs.putInt("akt", akt_idx);
-      Serial.printf("Aktivitaet: %s\n", AKTIVITAETEN[akt_idx]);
+      out("Aktivitaet: %s\n", AKTIVITAETEN[akt_idx]);
+      break;
+    case 'b': case 'B':
+      akt_idx = (akt_idx + N_AKT - 1) % N_AKT;
+      prefs.putInt("akt", akt_idx);
+      out("Aktivitaet: %s\n", AKTIVITAETEN[akt_idx]);
       break;
     case 'x': case 'X':
-      if (laeuft) { Serial.println("Erst beenden (s)."); break; }
+      if (laeuft) { out("Erst beenden (s).\n"); break; }
       LittleFS.format();
       aufnahme_nr = 0;
-      Serial.println("Speicher geloescht.");
+      out("Speicher geloescht.\n");
       break;
     case '?': menue(); break;
     default: break;
@@ -272,11 +364,11 @@ void setup() {
   Wire.setClock(400000);
 
   if (!mpuInit()) {
-    Serial.printf("Sensor nicht erkannt (0x%02X)\n", chip_id);
+    out("Sensor nicht erkannt (0x%02X)\n", chip_id);
     while (true) delay(1000);
   }
   if (!LittleFS.begin(true)) {
-    Serial.println("Dateisystem nicht bereit.");
+    out("Dateisystem nicht bereit.\n");
     while (true) delay(1000);
   }
 
@@ -292,11 +384,17 @@ void setup() {
   File f = wurzel.openNextFile();
   while (f) { aufnahme_nr++; f = wurzel.openNextFile(); }
 
+  bleStarten();
   menue();
 }
 
 void loop() {
   while (Serial.available()) befehl(Serial.read());
+  while (ble_ende != ble_kopf) {
+    char c = ble_puffer[ble_ende];
+    ble_ende = (ble_ende + 1) % sizeof(ble_puffer);
+    befehl(c);
+  }
 
   // BOOT-Taste: Start/Stopp ohne Serial Monitor (entprellt, Flanke)
   static bool     taste_vorher = HIGH;
@@ -328,11 +426,11 @@ void loop() {
   if (proben % ABTASTRATE == 0) datei.flush();
 
   if (proben % (ABTASTRATE * 10) == 0) {
-    Serial.printf("  %lu s aufgezeichnet\n",
+    out("  %lu s aufgezeichnet\n",
                   (unsigned long)(proben / ABTASTRATE));
   }
   if (proben >= (uint32_t)ABTASTRATE * MAX_DAUER_S) {
-    Serial.println("Maximale Dauer erreicht.");
+    out("Maximale Dauer erreicht.\n");
     aufnahmeBeenden();
   }
 }
