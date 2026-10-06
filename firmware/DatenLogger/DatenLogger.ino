@@ -34,6 +34,9 @@
 #include <Wire.h>
 #include <FS.h>
 #include <LittleFS.h>
+#include <Preferences.h>   // Auswahl ueberlebt Neustart/Stromwechsel
+
+static Preferences prefs;
 
 // ---------------------------------------------------------------
 #define PIN_SDA        22
@@ -240,10 +243,12 @@ static void befehl(char c) {
     case 'l': case 'L': listeZeigen(); break;
     case 'p': case 'P':
       pos_idx = (pos_idx + 1) % N_POS;
+      prefs.putInt("pos", pos_idx);
       Serial.printf("Position: %s\n", POSITIONEN[pos_idx]);
       break;
     case 'a': case 'A':
       akt_idx = (akt_idx + 1) % N_AKT;
+      prefs.putInt("akt", akt_idx);
       Serial.printf("Aktivitaet: %s\n", AKTIVITAETEN[akt_idx]);
       break;
     case 'x': case 'X':
@@ -274,6 +279,12 @@ void setup() {
     Serial.println("Dateisystem nicht bereit.");
     while (true) delay(1000);
   }
+
+  // Zuletzt gewaehlte Position/Aktivitaet wiederherstellen: Beim
+  // Umstecken vom PC auf die Powerbank startet das Board neu.
+  prefs.begin("logger", false);
+  pos_idx = prefs.getInt("pos", 0) % N_POS;
+  akt_idx = prefs.getInt("akt", 0) % N_AKT;
 
   // Fortlaufende Nummer aus den vorhandenen Dateien ableiten,
   // damit ein Neustart bestehende Aufnahmen nicht ueberschreibt.
