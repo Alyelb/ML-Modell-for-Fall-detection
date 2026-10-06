@@ -10,7 +10,8 @@ Aufbau
   1. Konstanten und Hilfsfunktionen
   2. Fensterung
   3. Datensatz-Loader (SisFall, KFall, UMAFall, FallAllD,
-     UniMiB-SHAR, WEDA-FALL)
+     UniMiB-SHAR, WEDA-FALL, CAPPIMU, ImbalanSense,
+     Smart-Insole)
   4. Modell und Auswertung
   5. Zeitliche Plausibilisierung (N-von-M-Voting)
   6. Ergebnisverwaltung
@@ -722,6 +723,287 @@ def load_weda(root, group=None, fs_dir="50Hz", verbose=True):
         print(f"[WEDA {group or 'alle'}] {len(trials)} Trials "
               f"({n_f} Sturz, {len(trials)-n_f} ADL), "
               f"{len(subs)} Probanden")
+    return trials
+
+
+
+# ---------------------------------------------------------------------
+#  CAPPIMU  (9 Positionen gleichzeitig, 50 Hz, BWT901CL, +-16 g)
+# ---------------------------------------------------------------------
+# Jede Position liegt als eigene CSV je Proband vor:
+#   data/subject_<n>/<position>.csv
+#   Spalten: time[ms], ax, ay, az [g], wx, wy, wz [deg/s], ex.., label
+# Besonderheiten:
+#   * Zeitstempel teils doppelt und mit Luecken zwischen den
+#     Aktivitaetsbloecken -> Duplikate entfernen, je Block auf ein
+#     gleichmaessiges 50-Hz-Raster interpolieren.
+#   * Die Klasse 'fall' beschriftet die GESAMTE Sturzsitzung (~160 s,
+#     mehrere Stuerze inkl. Aufstehen). Einzelne Aufpraelle werden
+#     daher auf einer Referenzposition am Rumpf detektiert und ueber
+#     die gemeinsamen Zeitstempel auf die Zielposition uebertragen.
+#     Diese Beschriftung ist eine Naeherung und im Bericht so zu nennen.
+CAPPIMU_FS = 50
+CAPPIMU_POSITIONS = ("head", "chest", "arm_l", "arm_r", "wrist_l",
+                     "wrist_r", "pocket", "knee_l", "knee_r")
+CAPPIMU_FALL_LABEL = "fall"
+_CAPPIMU_IMPACTS = {}      # Aufprallzeiten je Referenzdatei
+
+
+def _read_cappimu_imu(path):
+    import pandas as pd
+    d = pd.read_csv(path, usecols=["time", "ax", "ay", "az",
+                                   "wx", "wy", "wz", "label"])
+    d = d.drop_duplicates("time").sort_values("time")
+    d = d.dropna(subset=["ax", "ay", "az", "wx", "wy", "wz"])
+    return (d["time"].to_numpy(np.float64),
+            d[["ax", "ay", "az", "wx", "wy", "wz"]].to_numpy(np.float64),
+            d["label"].astype(str).to_numpy())
+
+
+def _cappimu_blocks(t, X, lab, fs=CAPPIMU_FS, max_gap_s=1.0):
+    """Zerlegt in zusammenhaengende Bloecke gleicher Klasse und
+    interpoliert jeden Block auf ein gleichmaessiges Raster.
+    Liefert (zeitraster_ms, daten (N,6), label)."""
+    if len(t) < 2:
+        return []
+    brk = np.where((np.diff(t) > max_gap_s * 1000) |
+                   (lab[1:] != lab[:-1]))[0] + 1
+    out = []
+    for s, e in zip(np.r_[0, brk], np.r_[brk, len(t)]):
+        if e - s < fs:                      # < 1 s -> verwerfen
+            continue
+        tt = t[s:e]
+        grid = np.arange(tt[0], tt[-1], 1000.0 / fs)
+        seg = np.column_stack([np.interp(grid, tt, X[s:e, k])
+                               for k in range(6)])
+        out.append((grid, seg.astype(np.float32), lab[s]))
+    return out
+
+
+def _cappimu_impact_times(blocks, min_g=2.5, min_dist_s=4.0,
+                          fs=CAPPIMU_FS):
+    """Aufprallzeitpunkte (ms) in den Sturzbloecken der Referenz."""
+    from scipy.signal import find_peaks
+    times = []
+    for grid, seg, lab in blocks:
+        if lab != CAPPIMU_FALL_LABEL:
+            continue
+        p, _ = find_peaks(acc_magnitude(seg), height=min_g,
+                          distance=int(min_dist_s * fs))
+        times.extend(grid[p].tolist())
+    return times
+
+
+def load_cappimu(root, position="knee_r", ref_position="chest",
+                 context_s=5.0, min_g=2.5, min_dist_s=4.0,
+                 subjects=None, verbose=True):
+    """CAPPIMU fuer eine Sensorposition.
+
+    root: Ordner, der subject_1 ... subject_30 enthaelt (".../data").
+    position: Zielposition (siehe CAPPIMU_POSITIONS).
+    ref_position: Rumpfposition zur Detektion der Aufpraelle.
+    context_s: Laenge je Sturz-Trial vor und nach dem Aufprall.
+
+    ADL: jeder Aktivitaetsblock ist ein Trial (Label 0).
+    Stuerze: je erkanntem Aufprall ein Trial von 2*context_s Sekunden
+    (Label 1, impact_idx gesetzt). Der Rest der Sturzsitzung
+    (Aufstehen, Gehen zur Matte) wird verworfen, damit er weder als
+    Sturz noch als ADL Label-Rauschen erzeugt.
+    """
+    position = position.lower()
+    root = Path(root)
+    subj_dirs = sorted((d for d in root.iterdir()
+                        if d.is_dir() and d.name.startswith("subject_")),
+                       key=lambda d: int(d.name.split("_")[1]))
+    if subjects is not None:
+        subj_dirs = [d for d in subj_dirs
+                     if int(d.name.split("_")[1]) in set(subjects)]
+    trials, n_imp = [], {}
+    ctx = int(context_s * CAPPIMU_FS)
+    half = int(0.5 * CAPPIMU_FS)
+
+    for sd in subj_dirs:
+        f = sd / f"{position}.csv"
+        if not f.exists():
+            continue
+        sid = f"CAP{int(sd.name.split('_')[1]):02d}"
+        blocks = _cappimu_blocks(*_read_cappimu_imu(f))
+
+        rf = sd / f"{ref_position.lower()}.csv"
+        key = (str(rf), min_g, min_dist_s)
+        if key not in _CAPPIMU_IMPACTS:      # Referenz nur einmal lesen
+            ref_blocks = (blocks if ref_position.lower() == position
+                          else _cappimu_blocks(*_read_cappimu_imu(rf))
+                          if rf.exists() else blocks)
+            _CAPPIMU_IMPACTS[key] = _cappimu_impact_times(
+                ref_blocks, min_g, min_dist_s)
+        impacts = _CAPPIMU_IMPACTS[key]
+        n_imp[sid] = len(impacts)
+
+        for grid, seg, lab in blocks:
+            if lab != CAPPIMU_FALL_LABEL:
+                trials.append({"data": seg, "label": 0, "subject": sid,
+                               "activity": lab, "impact_idx": None})
+                continue
+            mag = acc_magnitude(seg)
+            for ti in impacts:
+                if not (grid[0] <= ti <= grid[-1]):
+                    continue
+                c = int(np.argmin(np.abs(grid - ti)))
+                lo, hi = max(0, c - half), min(len(seg), c + half + 1)
+                c = lo + int(np.argmax(mag[lo:hi]))   # lokal verfeinern
+                s, e = max(0, c - ctx), min(len(seg), c + ctx)
+                if e - s < WIN_LEN:
+                    continue
+                trials.append({"data": seg[s:e], "label": 1,
+                               "subject": sid, "activity": "fall",
+                               "impact_idx": c - s})
+    if verbose:
+        n_f = sum(t["label"] for t in trials)
+        cnt = list(n_imp.values())
+        print(f"[CAPPIMU {position}] {len(trials)} Trials ({n_f} Sturz, "
+              f"{len(trials)-n_f} ADL), {len(n_imp)} Probanden, "
+              f"Aufpraelle je Proband: min {min(cnt) if cnt else 0}, "
+              f"median {int(np.median(cnt)) if cnt else 0}, "
+              f"max {max(cnt) if cnt else 0}")
+    return trials
+
+
+# ---------------------------------------------------------------------
+#  Moticon OpenGo (Smart-Insole v1.0, ImbalanSense)
+#  100 Hz, IMU in jeder Sohle: Acc [g], Gyro [deg/s]
+# ---------------------------------------------------------------------
+# Jede Sohle wird als eigener Trial behandelt (gleicher Proband).
+# Beide Datensaetze enthalten KEINE Stuerze; sie dienen als
+# fussnahe ADL- bzw. Negativdaten.
+MOTICON_FS = 100
+_MOTICON_COLS = {
+    "left":  ["left acceleration X[g]", "left acceleration Y[g]",
+              "left acceleration Z[g]", "left angular X[dps]",
+              "left angular Y[dps]", "left angular Z[dps]"],
+    "right": ["right acceleration X[g]", "right acceleration Y[g]",
+              "right acceleration Z[g]", "right angular X[dps]",
+              "right angular Y[dps]", "right angular Z[dps]"],
+}
+
+
+def _moticon_foot(df, foot):
+    import pandas as pd
+    """Extrahiert (N,6) einer Sohle; Luecken linear interpolieren."""
+    cols = _MOTICON_COLS[foot]
+    if not all(c in df.columns for c in cols):
+        return None
+    x = np.array(df[cols].apply(pd.to_numeric, errors="coerce"), dtype=np.float64)
+    ok = ~np.isnan(x).any(axis=1)
+    if ok.sum() < MOTICON_FS:
+        return None
+    i0, i1 = np.argmax(ok), len(ok) - np.argmax(ok[::-1])
+    x = x[i0:i1]
+    idx = np.arange(len(x))
+    for k in range(6):
+        m = np.isnan(x[:, k])
+        if m.any():
+            x[m, k] = np.interp(idx[m], idx[~m], x[~m, k])
+    return downsample(x, MOTICON_FS, FS_TARGET).astype(np.float32)
+
+
+def _read_moticon_txt(path):
+    """Moticon-Export (.txt): Metadatenkopf mit '#', dann TSV."""
+    import pandas as pd
+    hdr, skip = None, 0
+    with open(path, encoding="utf-8", errors="ignore") as fh:
+        for i, line in enumerate(fh):
+            if line.startswith("# time"):
+                hdr = line[2:].rstrip("\r\n").split("\t")
+                skip = i + 1
+                break
+            if not line.startswith("#"):
+                break
+    if hdr is None:
+        return None
+    return pd.read_csv(path, sep="\t", skiprows=skip, header=None,
+                       names=hdr, usecols=range(len(hdr)),
+                       encoding="utf-8", encoding_errors="ignore",
+                       on_bad_lines="skip", low_memory=False)
+
+
+IMBALANSENSE_NOTED = {2, 3, 5, 23, 40}   # Hinweise im README
+
+
+def load_imbalansense(root, feet=("left", "right"), exclude_noted=False,
+                      verbose=True):
+    """ImbalanSense (Zenodo 10.5281/zenodo.20924766, CC-BY 4.0).
+
+    root: Ordner mit den .txt-Dateien von raw_recordings.zip
+          (wird rekursiv durchsucht).
+    Dateiname: user31-medium2-shaking.txt bzw. u16-heavy1-norm.txt
+    activity: '<bedingung>_<intensitaet>', z.B. 'shaking_heavy'.
+    """
+    trials = []
+    for f in sorted(Path(root).rglob("*.txt")):
+        m = re.match(r"(?:u|user)(\d+)-([a-z]+)(\d)-([a-z]+)",
+                     f.stem, re.IGNORECASE)
+        if not m:
+            continue
+        uid = int(m.group(1))
+        if exclude_noted and uid in IMBALANSENSE_NOTED:
+            continue
+        df = _read_moticon_txt(f)
+        if df is None:
+            continue
+        for foot in feet:
+            x = _moticon_foot(df, foot)
+            if x is None or len(x) < WIN_LEN:
+                continue
+            trials.append({
+                "data": x, "label": 0, "subject": f"IMB{uid:02d}",
+                "activity": f"{m.group(4).lower()}_{m.group(2).lower()}",
+                "impact_idx": None, "foot": foot,
+            })
+    if verbose:
+        print(f"[ImbalanSense] {len(trials)} Trials (alle ADL), "
+              f"{len({t['subject'] for t in trials})} Probanden, "
+              f"{sum(len(t['data']) for t in trials)/FS_TARGET/3600:.2f} h")
+    return trials
+
+
+def load_smart_insole(root, feet=("left", "right"), verbose=True):
+    """Smart-Insole Dataset v1.0 (HMU BMI Lab), Annotated_Data/*.xlsx.
+
+    Nutzungsvereinbarung: nur nicht-kommerziell (Forschung/Lehre).
+    root: Ordner 'Annotated_Data' (enthaelt EL/, PD/, S/).
+    activity: Testcode, z.B. '1norm', '2tug'; zusaetzlich 'group'.
+    """
+    import pandas as pd
+    trials = []
+    for f in sorted(Path(root).rglob("*.xlsx")):
+        m = re.match(r"([a-z]+)(\d+)[_-](\d[a-z]+)\d*$", f.stem,
+                     re.IGNORECASE)
+        if not m:
+            continue
+        try:
+            df = pd.read_excel(f)
+        except Exception:
+            continue
+        if len(df) < MOTICON_FS:
+            continue
+        grp = m.group(1).upper()
+        for foot in feet:
+            x = _moticon_foot(df, foot)
+            if x is None or len(x) < WIN_LEN:
+                continue
+            trials.append({
+                "data": x, "label": 0,
+                "subject": f"SI_{grp}{int(m.group(2)):03d}",
+                "activity": m.group(3).lower(), "impact_idx": None,
+                "group": grp, "foot": foot,
+            })
+    if verbose:
+        for g_ in ("S", "EL", "PD"):
+            sub = [t for t in trials if t["group"] == g_]
+            print(f"[Smart-Insole {g_:>2}] {len(sub)} Trials, "
+                  f"{len({t['subject'] for t in sub})} Probanden, "
+                  f"{sum(len(t['data']) for t in sub)/FS_TARGET/60:.1f} min")
     return trials
 
 

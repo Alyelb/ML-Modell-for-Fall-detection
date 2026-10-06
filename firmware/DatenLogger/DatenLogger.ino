@@ -60,7 +60,9 @@ static const char *POSITIONEN[] = {"WAIST", "ANKLE", "FOOT_INSOLE",
 static const char *AKTIVITAETEN[] = {
     "walking", "jogging", "stairs_up", "stairs_down",
     "sit_stand", "lying_down",
-    "fall_forward", "fall_backward", "fall_lateral"};
+    "jumping", "pick_up", "sit_hard",
+    "fall_forward", "fall_knees", "fall_backward", "fall_lateral",
+    "fall_slip"};
 static const int N_POS = sizeof(POSITIONEN)/sizeof(POSITIONEN[0]);
 static const int N_AKT = sizeof(AKTIVITAETEN)/sizeof(AKTIVITAETEN[0]);
 
