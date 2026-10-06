@@ -2488,38 +2488,89 @@ CAPPIMU erfasst dieselben Stürze und Alltagsaktivitäten gleichzeitig an
 neun Körperpositionen. Damit lässt sich der Einfluss der Position
 isolieren: Sensorik, Probanden, Bewegungen und Abtastrate sind
 identisch, nur der Messort ändert sich. Das Basismodell wird ohne
-Anpassung auf jede Position angewendet. Ergänzt werden die beiden
-Sohlendatensätze, für die nur die Fehlalarmrate bestimmbar ist.
+Anpassung auf jede Position angewendet; je Position stehen 731
+Sturzfenster und rund $113\,000$ ADL-Fenster (etwa $31$\,h) zur
+Verfügung. Ergänzt werden die beiden Sohlendatensätze, für die nur die
+Fehlalarmrate bestimmbar ist.
 
 \begin{table}[H]
 \centering
 \caption{Zero-Shot-Leistung des Basismodells je Position (CAPPIMU,
-         30 Probanden; Fuß: Smart-Insole und ImbalanSense).
-         Schwelle $0{,}5$, ADL-Fenster mit $1$\,s Schrittweite.}
+         30 Probanden; Fuß: ImbalanSense und Smart-Insole).
+         Schwelle $0{,}5$, ADL-Fenster mit $1$\,s Schrittweite.
+         Peak: Maximum von $|a|$ je Fenster.}
 \label{tab:fuss_kurve}
 \small
 \begin{tabularx}{0.95\textwidth}{X c c c c}
 \toprule
 \textbf{Position} & \textbf{Se} & \textbf{FP/h}
-& \textbf{Peak Sturz} & \textbf{Peak ADL (P99)} \\
+& \textbf{Peak Sturz (Med.)} & \textbf{Peak ADL (P99)} \\
 \midrule
-Kopf          & \offen{} & \offen{} & \offen{} & \offen{} \\
-Brust         & \offen{} & \offen{} & \offen{} & \offen{} \\
-Oberarm       & \offen{} & \offen{} & \offen{} & \offen{} \\
-Handgelenk    & \offen{} & \offen{} & \offen{} & \offen{} \\
-Hosentasche   & \offen{} & \offen{} & \offen{} & \offen{} \\
-Schienbein li.& \offen{} & \offen{} & \offen{} & \offen{} \\
-Schienbein re.& \offen{} & \offen{} & \offen{} & \offen{} \\
+Kopf              & 28{,}4\,\% &  59 & 2{,}9\,g & 2{,}2\,g \\
+Brust             & 48{,}4\,\% &  92 & 5{,}0\,g & 6{,}0\,g \\
+Oberarm links     &  6{,}2\,\% &  46 & 4{,}0\,g & 8{,}4\,g \\
+Oberarm rechts    & 54{,}6\,\% & 116 & 3{,}7\,g & 7{,}4\,g \\
+Handgelenk links  &  9{,}9\,\% &  84 & 5{,}0\,g & 10{,}4\,g \\
+Handgelenk rechts & 51{,}8\,\% & 118 & 3{,}7\,g & 4{,}5\,g \\
+Hosentasche       & 23{,}0\,\% &  63 & 4{,}3\,g & 10{,}4\,g \\
+Schienbein links  & 16{,}6\,\% & 168 & 2{,}9\,g & 9{,}9\,g \\
+Schienbein rechts & 39{,}5\,\% &  36 & 3{,}0\,g & 10{,}2\,g \\
 \midrule
-Fuß (ImbalanSense) & -- & \offen{} & -- & \offen{} \\
-Fuß (Smart-Insole) & -- & \offen{} & -- & \offen{} \\
+Fuß (ImbalanSense, 40 Pers.) & -- & 161 & -- & 6{,}8\,g \\
+Fuß (Smart-Insole, 29 Pers.) & -- & 290 & -- & 8{,}1\,g \\
+\quad davon Erwachsene        & -- & 215 & -- & 8{,}3\,g \\
+\quad davon Ältere            & -- & 373 & -- & 7{,}4\,g \\
+\quad davon Parkinson         & -- & 302 & -- & 7{,}3\,g \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\offen{Interpretation nach Auswertung von Notebook~10: Verlauf von Se
-und FP/h entlang der Positionen; Abstand zwischen Sturz- und
-ADL-Spitzen.}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{Fotos/positionskurve.png}
+  \caption{Links: Sensitivität (Linie) und Fehlalarme je Stunde
+           (Balken) des Basismodells je Position. Rechts: maximaler
+           Beschleunigungsbetrag je Fenster bei Stürzen (Median) und
+           im Alltag (99.~Perzentil).}
+  \label{fig:positionskurve}
+\end{figure}
+
+Drei Befunde stechen hervor.
+
+\textbf{Die Seite entscheidet stärker als die Position.} Eine mit der
+Entfernung vom Rumpf monoton fallende Kurve, wie sie zu erwarten wäre,
+zeigt sich nicht. Stattdessen unterscheiden sich linke und rechte
+Körperseite bei identischen Stürzen um ein Vielfaches: am Oberarm
+$6{,}2\,\%$ gegenüber $54{,}6\,\%$, am Handgelenk $9{,}9\,\%$ gegenüber
+$51{,}8\,\%$, am Schienbein $16{,}6\,\%$ gegenüber $39{,}5\,\%$. Da
+die Sensoren auf beiden Seiten spiegelbildlich getragen werden,
+ändert sich zwischen links und rechts im Wesentlichen die Orientierung
+der Achsen. Das CNN verarbeitet die Achsen einzeln und ist daher nicht
+rotationsinvariant -- anders als der Random Forest mit Betragsmerkmalen
+(Abschnitt~\ref{sec:randomforest}). Für die Einlegesohle ist das unmittelbar
+relevant: Linke und rechte Sohle sind ebenfalls spiegelbildlich.
+
+\textbf{Alltagsspitzen übertreffen Sturzspitzen.} An allen Positionen
+außer dem Kopf liegt das 99.~Perzentil der ADL-Spitzen über dem
+Median der Sturzspitzen; am Schienbein mit rund $10$\,g gegenüber
+$3$\,g um mehr als das Dreifache. Die Höhe des Aufpralls allein trennt
+Stürze an den Extremitäten daher nicht.
+
+\textbf{Am Fuß sind die Fehlalarme am höchsten.} Mit $161$ bzw.\
+$290$ Fehlalarmen je Stunde übertrifft die Sohle alle Rumpf- und
+Armpositionen. Anders als bei WEDA-FALL am Handgelenk
+(Abschnitt~\ref{sec:zielgruppe}) ist der Unterschied zwischen den
+Gruppen hier nicht auf eine Einzelbewegung zurückzuführen, denn alle
+drei Gruppen führten dieselben Geh- und Aufstehtests durch: Ältere
+($373$/h) und Parkinson-Patienten ($302$/h) lösen mehr Fehlalarme aus
+als jüngere Erwachsene ($215$/h).
+
+Einschränkend ist anzumerken, dass auch an der Brust nur $48{,}4\,\%$
+erreicht werden, deutlich weniger als auf KFall. Neben der fremden
+Sensorik dürfte die näherungsweise Aufprallbeschriftung
+(Abschnitt~\ref{sec:fuss_daten}) dazu beitragen. Der Vergleich
+zwischen den Positionen ist davon nicht betroffen, da alle Positionen
+dieselben Zeitpunkte verwenden.
 
 %------------------------------------------------------------------
 \section{Training mit beinnahen Daten}
@@ -2538,7 +2589,7 @@ Verglichen werden vier Varianten, die alle vom Basismodell ausgehen:
 \midrule
 A  & Basismodell (SisFall), unverändert \\
 K  & A, Fine-Tuning auf KFall (Zwischenstufe aus Abschnitt~\ref{sec:progressive}) \\
-B1 & K, Fine-Tuning auf CAPPIMU-Schienbein \\
+B1 & K, Fine-Tuning auf CAPPIMU-Schienbein (beide Seiten) \\
 B2 & K, Fine-Tuning auf CAPPIMU-Schienbein \emph{und} ImbalanSense-Sohle \\
 \bottomrule
 \end{tabularx}
@@ -2553,33 +2604,54 @@ die ADL-Trainingsfenster je Falte auf $20\,000$ (CAPPIMU) bzw.\
 $10\,000$ (ImbalanSense) gekappt; bewertet wird stets auf allen
 Testfenstern.
 
-Der Vergleich B2 gegen B1 prüft gezielt, ob zusätzliche Fußdaten ohne
-Stürze die Sensitivität senken. Anders als beim Hard-Negative-Training
-werden hier keine Fenster höher gewichtet, sondern Daten einer neuen
-Domäne ergänzt.
-
 \begin{table}[H]
 \centering
-\caption{Ergebnisse der Trainingsvarianten (gepoolt über fünf Falten).}
+\caption{Ergebnisse der Trainingsvarianten, gepoolt über fünf Falten
+         (1462 Sturzfenster am Schienbein).}
 \label{tab:fuss_training}
 \small
-\begin{tabularx}{\textwidth}{l X c c c}
+\begin{tabularx}{\textwidth}{l X c c c c}
 \toprule
-& \multicolumn{2}{c}{\textbf{Schienbein (CAPPIMU)}} & \multicolumn{2}{c}{\textbf{FP/h Sohle}} \\
-\cmidrule(lr){2-3}\cmidrule(lr){4-5}
-\textbf{Var.} & \textbf{Se (95\,\%-KI)} & \textbf{Sp}
+& \multicolumn{3}{c}{\textbf{Schienbein (CAPPIMU)}} & \multicolumn{2}{c}{\textbf{FP/h Sohle}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-6}
+\textbf{Var.} & \textbf{Se (95\,\%-KI)} & \textbf{Sp} & \textbf{FP/h}
 & \textbf{ImbalanSense} & \textbf{Smart-Insole} \\
 \midrule
-A  & \offen{} & \offen{} & \offen{} & \offen{} \\
-K  & \offen{} & \offen{} & \offen{} & \offen{} \\
-B1 & \offen{} & \offen{} & \offen{} & \offen{} \\
-B2 & \offen{} & \offen{} & \offen{} & \offen{} \\
+A  & 28{,}0\,\% \enskip [25{,}8; 30{,}4] & 97{,}2\,\% & 102 & 161 & 290 \\
+K  & 22{,}6\,\% \enskip [20{,}5; 24{,}8] & 98{,}7\,\% &  48 &  51 &  65 \\
+B1 & 83{,}9\,\% \enskip [81{,}9; 85{,}7] & 98{,}8\,\% &  45 & 412 & 508 \\
+B2 & \textbf{84{,}5\,\%} \enskip [82{,}5; 86{,}2] & 96{,}4\,\% & 128 & \textbf{18} & \textbf{53} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\offen{Gepaarte Vergleiche B1 vs.\ K und B2 vs.\ B1 (Se, Sp) mit
-95\,\%-Konfidenzintervall und Anzahl gewonnener Falten.}
+\textbf{Sturzdaten vom Bein sind entscheidend.} Fine-Tuning auf den
+Schienbeinstürzen hebt die Sensitivität von $22{,}6\,\%$ auf
+$83{,}9\,\%$ (gepaart $+61{,}2$\,pp, 95\,\%-KI $[+60{,}2; +62{,}3]$,
+besser in 5 von 5 Falten) bei unveränderter Spezifität am Schienbein.
+
+\textbf{Ohne Fußdaten explodieren die Fehlalarme an der Sohle.} B1
+verdreifacht die Fehlalarme an der Sohle gegenüber dem Basismodell
+($412$ bzw.\ $508$/h). Das Modell hat gelernt, dass kräftige
+Beinimpulse auf Stürze hinweisen -- und an der Sohle erzeugt jeder
+Fersenaufsatz solche Impulse.
+
+\textbf{Fußdaten ohne Stürze beheben das, ohne Sensitivität zu
+kosten.} B2 senkt die Fehlalarme an der Sohle um mehr als $95\,\%$:
+auf $18$/h bei unbekannten ImbalanSense-Probanden und auf $53$/h auf dem
+vollständig externen Smart-Insole-Datensatz. Beide Verbesserungen sind
+gepaart gesichert (Spezifität $+10{,}9$\,pp bzw.\ $+12{,}6$\,pp, je 5 von
+5 Falten). Die Sensitivität am Schienbein bleibt unverändert
+($+0{,}6$\,pp, 95\,\%-KI $[-0{,}9; +2{,}1]$). Die Spezifität am
+Schienbein sinkt leicht ($-2{,}3$\,pp), statistisch nicht gesichert und
+überwiegend auf eine einzelne Falte zurückzuführen.
+
+Dieser Befund steht in deutlichem Gegensatz zum Hard-Negative-Training
+(Abschnitt~\ref{sec:hardneg}), das $8$\,pp Sensitivität kostete. Der
+Unterschied liegt in der Art der Maßnahme: Dort wurden vorhandene
+Fenster derselben Domäne höher gewichtet, hier werden Daten der
+Zieldomäne ergänzt. Nicht die Betonung schwieriger Beispiele, sondern
+die Abdeckung der Zielposition verbessert das Modell.
 
 %------------------------------------------------------------------
 \section{Pilotversuch auf der Zielhardware}
@@ -2605,7 +2677,34 @@ bleibt gültig, da keines der Modelle diese Daten gesehen hat.
 \section{Zwischenfazit}
 \label{sec:fuss_fazit}
 
-\offen{Nach Auswertung zu ergänzen.}
+\begin{enumerate}
+\item \textbf{Ein am Rumpf trainiertes Modell ist an der Sohle nicht
+      einsetzbar.} Es verursacht dort $161$--$290$ Fehlalarme je Stunde,
+      bei älteren Personen bis $373$.
+\item \textbf{Die Orientierung des Sensors wiegt schwerer als die
+      Position.} Spiegelbildlich getragene Sensoren unterscheiden sich
+      bei identischen Stürzen um bis zu Faktor neun in der
+      Sensitivität. Linke und rechte Sohle sind spiegelbildlich; ein
+      Modell für die Sohle muss daher orientierungsunabhängig sein,
+      etwa durch Rotations- und Spiegelaugmentierung oder
+      Betragsmerkmale.
+\item \textbf{Beinnahe Sturzdaten und Fußdaten ohne Stürze ergänzen
+      sich.} Erst ihre Kombination (B2) erreicht zugleich $84{,}5\,\%$
+      Sensitivität am Schienbein und $18$--$53$ Fehlalarme je Stunde an
+      der Sohle. Fußdaten ohne Stürze kosten -- anders als die
+      Hard-Negative-Gewichtung -- keine Sensitivität.
+\item \textbf{Für den Einsatz reicht das noch nicht.} $53$ Fehlalarme
+      je Stunde auf unbekannten Personen sind für ein Alarmsystem zu
+      viel. Die zeitliche Plausibilisierung
+      (Abschnitt~\ref{sec:voting}) und eine Erkennung der
+      Liegephase nach dem Sturz sind daher unverzichtbar; deren
+      Parameter sind auf Daten der Zielhardware festzulegen.
+\end{enumerate}
+
+Offen bleibt, wie gut das Modell Stürze \emph{an der Sohle} erkennt:
+Keine der verwendeten Quellen enthält solche Stürze. Diese Lücke
+adressiert der Pilotversuch (Abschnitt~\ref{sec:fuss_pilot}); eine
+belastbare Antwort erfordert Aufnahmen mehrerer Personen.
 
 %------------------------------------------------------------------
 %   BIBLIOGRAPHY

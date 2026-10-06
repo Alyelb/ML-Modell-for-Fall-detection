@@ -257,19 +257,51 @@ magnitude tops out at exactly √3 · 2 g = 3.46 g. Unsuitable for
 training; the project's own logger (`firmware/DatenLogger`) records at
 100 Hz, ±16 g, ±2000 °/s.
 
-**Experiments (results pending):**
+**Placement curve** (CAPPIMU, same 731 falls seen from nine positions,
+base model zero-shot):
 
-1. *Placement curve.* CAPPIMU records the same falls simultaneously at
-   nine body positions, so position is the only variable. The base
-   model is applied zero-shot to each, plus false-alarm rates on both
-   insole datasets.
-2. *Lower-limb training.* SisFall → KFall → shin falls (CAPPIMU),
-   with and without insole ADL (ImbalanSense), 5-fold
-   subject-independent CV. Smart-Insole is never trained on and serves
-   as an external false-alarm test including elderly and Parkinson's
-   participants.
-3. *Pilot recordings* with the target hardware at waist and foot,
-   evaluated with both the base and the lower-limb model.
+| Position | Left | Right |
+|---|---|---|
+| Upper arm | 6.2 % | 54.6 % |
+| Wrist | 9.9 % | 51.8 % |
+| Shin | 16.6 % | 39.5 % |
+
+Chest 48.4 %, head 28.4 %, pocket 23.0 %. There is no monotonic decline
+with distance from the trunk — **the side matters more than the
+position.** Sensors on the left and right are worn mirror-imaged, so
+what changes is the axis orientation, and the CNN processes axes
+individually. Left and right insoles are mirror images too: a model
+for the sole must be orientation-invariant (rotation/mirror
+augmentation or magnitude features).
+
+At every position except the head, the 99th percentile of everyday
+peaks exceeds the median fall peak — at the shin ~10 g vs ~3 g.
+
+**False alarms at the sole** (base model): 161/h (ImbalanSense),
+290/h (Smart-Insole) — 373/h for elderly, 302/h for Parkinson's,
+215/h for younger adults, all performing the same walking tests.
+
+**Lower-limb training** (5-fold, subject-independent):
+
+| Variant | Se shin (95 % CI) | FP/h ImbalanSense | FP/h Smart-Insole (external) |
+|---|---|---|---|
+| A base (SisFall) | 28.0 % [25.8; 30.4] | 161 | 290 |
+| K + KFall | 22.6 % [20.5; 24.8] | 51 | 65 |
+| B1 + shin falls | 83.9 % [81.9; 85.7] | 412 | 508 |
+| **B2 + shin falls + sole ADL** | **84.5 % [82.5; 86.2]** | **18** | **53** |
+
+Shin falls lift sensitivity by +61 pp (5/5 folds) but triple the
+false alarms at the sole: the model learns "strong leg impulse = fall",
+and every heel strike is one. Adding sole recordings without falls
+cuts sole false alarms by >95 % (significant, 5/5 folds) **at no cost
+in sensitivity** (+0.6 pp, n.s.) — unlike hard-negative weighting,
+which cost 8 pp. Adding target-domain data works; re-weighting
+existing data does not.
+
+53 false alarms per hour on unseen people is still too many for an
+alarm system; temporal voting and long-lie detection remain necessary.
+No source contains falls *at the sole* — that gap is what the pilot
+recordings address (pending).
 
 ---
 
@@ -371,7 +403,7 @@ serial output goes to the UART pins instead of USB).
 - [x] Firmware: sensor, step detection, deep sleep, BLE
 - [ ] TFLite deployment on device
 - [x] Foot-domain datasets: loaders and evaluation notebook
-- [ ] Placement curve and lower-limb training (notebook 10)
+- [x] Placement curve and lower-limb training (notebook 10)
 - [ ] Pilot recordings at waist and foot
 - [ ] Voting parameters from pilot data
 - [ ] Long-lie detection
