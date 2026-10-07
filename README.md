@@ -32,8 +32,10 @@ hardware.
 │   ├── 08_hardneg_cv        Hard-negative weighting, cross-validated
 │   ├── 09_pilotdaten        Recordings from the target hardware,
 │   │                        base vs. lower-limb model
-│   └── 10_fussdomaene       Placement curve (9 body positions + foot),
-│                            training with leg/foot data
+│   ├── 10_fussdomaene       Placement curve (9 body positions + foot),
+│   │                        training with leg/foot data
+│   └── 11_orientierung_matrix  Sensor orientation (mirror/rotation) and
+│                            training-chain matrix incl. augmentation
 │
 ├── firmware/                Arduino sketches for ESP32-C6 + MPU-6050/6500
 │   ├── CleverSole/          Full detector: steps, inference, voting,
@@ -298,6 +300,21 @@ in sensitivity** (+0.6 pp, n.s.) — unlike hard-negative weighting,
 which cost 8 pp. Adding target-domain data works; re-weighting
 existing data does not.
 
+**Pilot recordings, own hardware** (ESP32-C6 + MPU-6500, one person,
+lower-limb model, zero-shot): ankle right 83 % / left 77 % window
+sensitivity, 100 % / 95 % of falls detected within ±1 s; walking and
+jogging 0–4 false windows out of ~170. Remaining false alarms come from
+sitting down, sitting hard and picking things up — movements where the
+leg itself goes horizontal. At the ankle a fall peaks at only
+2.6–2.9 g, below jogging and jumping (8–12 g); impacts are therefore
+located via the subsequent lying phase, not the highest peak.
+
+**Sensor orientation.** Rotating the pilot recordings in software:
+mirroring and rotation about the leg axis barely matter (model was
+trained on both shins), but arbitrary 3-D rotations drop sensitivity to
+as low as 14 %. The mounting orientation in the insole is part of the
+model specification. Notebook 11 tests rotation augmentation.
+
 53 false alarms per hour on unseen people is still too many for an
 alarm system; temporal voting and long-lie detection remain necessary.
 No source contains falls *at the sole* — that gap is what the pilot
@@ -404,7 +421,9 @@ serial output goes to the UART pins instead of USB).
 - [ ] TFLite deployment on device
 - [x] Foot-domain datasets: loaders and evaluation notebook
 - [x] Placement curve and lower-limb training (notebook 10)
-- [ ] Pilot recordings at waist and foot
+- [x] Pilot recordings at waist and both ankles (target hardware)
+- [ ] Pilot recordings in the insole / on top of the foot
+- [ ] Orientation test and training matrix (notebook 11)
 - [ ] Voting parameters from pilot data
 - [ ] Long-lie detection
 

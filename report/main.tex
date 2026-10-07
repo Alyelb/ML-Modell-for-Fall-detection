@@ -2657,21 +2657,144 @@ die Abdeckung der Zielposition verbessert das Modell.
 \section{Pilotversuch auf der Zielhardware}
 \label{sec:fuss_pilot}
 
-Abschließend werden beide Modelle (Basis und Lower-Limb, d.\,h.\ B2
-auf allen Daten trainiert) auf Aufnahmen mit dem eigenen Prototyp
-(ESP32-C6, MPU-6500) angewendet. Aufgezeichnet wird an zwei Positionen:
-an der Taille, wo der Unterschied zu SisFall allein in der Hardware
-liegt, und am Fuß, wo Hardware und Position zugleich abweichen.
-Simulierte Stürze erfolgen auf eine Matte (vorwärts, auf die Knie,
-seitlich, rückwärts, Ausrutschen), ergänzt um Gehen, Treppen,
-Hinsetzen, Springen und Aufheben eines Gegenstands.
+Abschließend werden die Modelle auf Aufnahmen mit dem eigenen
+Prototyp (ESP32-C6, MPU-6500, $100$\,Hz, $\pm 16$\,g,
+$\pm 2000\,^{\circ}/\mathrm{s}$) angewendet. Aufgezeichnet wurde an
+drei Positionen: an der Hüfte, wo der Unterschied zu SisFall allein in
+der Hardware liegt, sowie am rechten und linken Knöchel, wo Hardware
+und Position zugleich abweichen. Der Sensor war in allen
+Knöchelaufnahmen gleich ausgerichtet (USB-Buchse oben). Je Position
+wurden vier Sturzarten auf eine Matte (auf die Knie, vorwärts,
+seitlich, rückwärts; je vier bis acht Wiederholungen) sowie Gehen,
+Joggen, Treppen, Hinsetzen, kräftiges Hinsetzen, Springen, Aufheben
+und Liegen aufgezeichnet. Die Bedienung erfolgte per Smartphone über
+Bluetooth, sodass der Sensor zwischen den Aufnahmen nicht abgenommen
+werden musste.
 
-Die Aufnahmen stammen von einer einzigen Person. Eine
-subjektunabhängige Bewertung ist damit nicht möglich; der Versuch
-ist als Machbarkeitsnachweis zu verstehen. Die Zero-Shot-Auswertung
-bleibt gültig, da keines der Modelle diese Daten gesehen hat.
+\textbf{Aufprallbestimmung.} Am Knöchel ist der Sturz häufig nicht die
+stärkste Spitze einer Aufnahme: Die Klopfmarken zur Synchronisation
+und das Aufstehen erreichen bis zu $12$\,g, der Sturz selbst im Median
+nur $2{,}6$--$2{,}9$\,g. Eine Spitzenschwelle fand in einer Aufnahme
+mit fünf Stürzen nur einen. Der Aufprall wird daher über die
+anschließende Liegephase bestimmt: eine Ruhephase von mindestens
+$2$\,s, deren Schwerkraftrichtung um mehr als $40^{\circ}$ von der
+Stehhaltung abweicht; der Aufprall ist das Beschleunigungsmaximum in
+den $2$\,s davor. Damit wurden an der Hüfte 22, rechts 23 und links 22
+Stürze erkannt, in Übereinstimmung mit dem Aufnahmeprotokoll.
 
-\offen{Ergebnisse aus Notebook~09: Se und FP/h je Position und Modell.}
+\begin{table}[H]
+\centering
+\caption{Lower-Limb-Modell (B2) auf den Pilotdaten. Se~Fenster:
+         aufprallzentriertes Fenster; Se~Ereignis: mindestens ein
+         Fenster innerhalb $\pm 1$\,s um den Aufprall (Schrittweite
+         $0{,}2$\,s). Schwelle $0{,}5$.}
+\label{tab:fuss_pilot}
+\small
+\begin{tabularx}{\textwidth}{X c c c c c}
+\toprule
+\textbf{Position} & \textbf{Stürze} & \textbf{Se Fenster}
+& \textbf{Se Ereignis} & \textbf{FP Gehen} & \textbf{FP Joggen} \\
+\midrule
+Knöchel rechts & 23 & $83\,\%$ & $100\,\%$ & 4 / 113 & 1 / 56 \\
+Knöchel links  & 22 & $77\,\%$ & $95\,\%$  & 0 / 119 & 0 / 59 \\
+Hüfte          & 22 & $41\,\%$ & $73\,\%$  & 14 / 182 & 1 / 67 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Am Knöchel erkennt das Lower-Limb-Modell nahezu alle Stürze, obwohl
+es weder diese Hardware noch diese Person gesehen hat. Gehen und Joggen
+lösen dort kaum Fehlalarme aus -- genau die Aktivitäten, gegen die die
+ImbalanSense-Daten im Training gerichtet waren. Die verbleibenden
+Fehlalarme stammen aus Bewegungen, bei denen das Bein selbst in die
+Horizontale gelangt: Hinsetzen und Aufstehen, kräftiges Hinsetzen und
+Aufheben (zusammen $22\,\%$ dieser Fenster rechts, $37\,\%$ links). Diese
+Aktivitäten wurden gezielt als schwierige Fälle aufgenommen; eine
+Fehlalarmrate je Stunde ist aus wenigen Minuten solcher Aufnahmen nicht
+sinnvoll ableitbar. Eine N-von-M-Regel (3 von 5, Schwelle $0{,}5$)
+halbiert die Fehlalarm-Ereignisse bei einer Ereignis-Sensitivität von
+$95$--$100\,\%$.
+
+An der Hüfte ist das Lower-Limb-Modell erwartungsgemäß schwächer, da
+es auf Beindaten angepasst wurde. \offen{Vergleich mit dem
+Basismodell (SisFall) an allen drei Positionen aus Notebook~09.}
+
+%------------------------------------------------------------------
+\section{Einfluss der Sensororientierung}
+\label{sec:fuss_orient}
+
+Die Positionskurve (Abschnitt~\ref{sec:fuss_kurve}) zeigt bei
+identischen Stürzen große Unterschiede zwischen linker und rechter
+Körperseite: am Oberarm $6{,}2\,\%$ gegenüber $54{,}6\,\%$, am
+Handgelenk $9{,}9\,\%$ gegenüber $51{,}8\,\%$, am Schienbein
+$16{,}6\,\%$ gegenüber $39{,}5\,\%$. Bewegung, Probanden und Sensorik
+sind auf beiden Seiten gleich; verschieden ist vor allem die Lage der
+Sensorachsen relativ zum Körper, da die Sensoren spiegelbildlich
+getragen werden.
+
+\textbf{Ursache.} Das CNN verarbeitet die sechs Kanäle einzeln. Die
+Z-Normalisierung je Fenster und Kanal entfernt zwar den
+Schwerkraftanteil, nicht aber die Verteilung der Bewegung auf die
+Achsen: Dieselbe Bewegung erscheint bei gedrehtem Sensor in anderen
+Kanälen und mit anderem Vorzeichen. Die Betragsmerkmale des Random
+Forest sind dagegen unabhängig von der Orientierung; nach einer
+beliebigen Drehung und Spiegelung weichen sie um weniger als $10^{-7}$
+(relativ) ab.
+
+\textbf{Prüfung an eigenen Daten.} Die Knöchelaufnahmen des
+Pilotversuchs wurden rechnerisch gedreht bzw.\ gespiegelt und erneut
+mit dem Lower-Limb-Modell bewertet (Tabelle~\ref{tab:fuss_orient}).
+Beschleunigung und Winkelgeschwindigkeit werden dabei gemeinsam
+transformiert; bei einer Spiegelung wechseln, da die
+Winkelgeschwindigkeit ein Pseudovektor ist, die beiden anderen
+Gyroskopachsen das Vorzeichen.
+
+\begin{table}[H]
+\centering
+\caption{Sensitivität (aufprallzentriertes Fenster) des Lower-Limb-Modells
+         nach rechnerischer Drehung bzw.\ Spiegelung der Pilotdaten.}
+\label{tab:fuss_orient}
+\small
+\begin{tabularx}{0.9\textwidth}{X c c}
+\toprule
+\textbf{Transformation} & \textbf{Knöchel rechts} & \textbf{Knöchel links} \\
+\midrule
+keine (Originallage)            & $83\,\%$ & $77\,\%$ \\
+gespiegelt (zwei Ebenen)        & $87\,\%$ & $73\,\%$ \\
+$90^{\circ}$ / $180^{\circ}$ um die Beinachse & $87$ / $91\,\%$ & $68$ / $82\,\%$ \\
+20 zufällige Drehungen, Mittel  & $65\,\%$ & $50\,\%$ \\
+20 zufällige Drehungen, Bereich & $35$--$91\,\%$ & $14$--$91\,\%$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Zwei Befunde ergeben sich. Erstens ist das Lower-Limb-Modell gegenüber
+Spiegelung und Drehung um die Beinachse weitgehend unempfindlich. Es
+wurde auf beiden Schienbeinen trainiert und hat damit beide
+Spiegellagen gesehen; auch die beiden Knöchel des Pilotversuchs, bei
+gleicher Einbaulage aufgenommen, liegen nah beieinander ($83$ bzw.\
+$77\,\%$). Zweitens bricht die Sensitivität bei beliebiger Drehung auf
+bis zu $14\,\%$ ein. Kippt der Sensor gegenüber der Beinachse -- etwa
+durch eine andere Lage in der Sohle oder eine abweichende Schuhform --,
+ist das Ergebnis nicht mehr vorhersagbar.
+
+\textbf{Folgerungen für die Sohle.}
+\begin{enumerate}
+\item Die Einbaulage des Sensors in der Sohle ist festzulegen und in
+      der Fertigung einzuhalten; sie ist Teil der Modellspezifikation.
+\item Das Training muss beide Spiegellagen enthalten, da linke und
+      rechte Sohle spiegelbildlich sind -- entweder durch Daten beider
+      Seiten oder durch Spiegelaugmentierung.
+\item Für Robustheit gegenüber Kippung kommen eine
+      Rotationsaugmentierung im Training oder orientierungsunabhängige
+      Eingänge (Beträge, Ausrichtung an der Schwerkraft) in Betracht.
+      \offen{Ergebnis der Rotationsaugmentierung (Notebook~11, B2r gegenüber B2).}
+\end{enumerate}
+
+Die Orientierung ist damit eine eigene, bislang wenig beachtete
+Fehlerquelle beim Übertrag zwischen Datensätzen: Unterschiede, die auf
+den ersten Blick der Position oder der Sensorik zugeschrieben würden,
+können allein aus der Achsenlage folgen.
 
 %------------------------------------------------------------------
 \section{Zwischenfazit}
@@ -2684,10 +2807,14 @@ bleibt gültig, da keines der Modelle diese Daten gesehen hat.
 \item \textbf{Die Orientierung des Sensors wiegt schwerer als die
       Position.} Spiegelbildlich getragene Sensoren unterscheiden sich
       bei identischen Stürzen um bis zu Faktor neun in der
-      Sensitivität. Linke und rechte Sohle sind spiegelbildlich; ein
-      Modell für die Sohle muss daher orientierungsunabhängig sein,
-      etwa durch Rotations- und Spiegelaugmentierung oder
-      Betragsmerkmale.
+      Sensitivität. Training auf beiden Körperseiten macht das Modell
+      gegenüber Spiegelung robust, nicht aber gegenüber beliebiger
+      Drehung (Se $14$--$91\,\%$, Abschnitt~\ref{sec:fuss_orient}).
+      Die Einbaulage ist daher festzulegen.
+\item \textbf{Auf der eigenen Hardware am Knöchel einsetzbar.} Das
+      Lower-Limb-Modell erkennt $95$--$100\,\%$ der Stürze am Knöchel
+      des eigenen Prototyps und löst beim Gehen und Joggen kaum
+      Fehlalarme aus.
 \item \textbf{Beinnahe Sturzdaten und Fußdaten ohne Stürze ergänzen
       sich.} Erst ihre Kombination (B2) erreicht zugleich $84{,}5\,\%$
       Sensitivität am Schienbein und $18$--$53$ Fehlalarme je Stunde an
@@ -2701,10 +2828,10 @@ bleibt gültig, da keines der Modelle diese Daten gesehen hat.
       Parameter sind auf Daten der Zielhardware festzulegen.
 \end{enumerate}
 
-Offen bleibt, wie gut das Modell Stürze \emph{an der Sohle} erkennt:
-Keine der verwendeten Quellen enthält solche Stürze. Diese Lücke
-adressiert der Pilotversuch (Abschnitt~\ref{sec:fuss_pilot}); eine
-belastbare Antwort erfordert Aufnahmen mehrerer Personen.
+Offen bleibt, wie gut das Modell Stürze \emph{in der Sohle} erkennt:
+Der Pilotversuch misst am Knöchel und stammt von einer einzigen
+Person. Eine belastbare Antwort erfordert Aufnahmen mehrerer Personen
+mit dem Sensor in der Sohle.
 
 %------------------------------------------------------------------
 %   BIBLIOGRAPHY

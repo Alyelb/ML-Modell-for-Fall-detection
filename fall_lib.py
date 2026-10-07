@@ -1007,6 +1007,161 @@ def load_smart_insole(root, feet=("left", "right"), verbose=True):
     return trials
 
 
+# ---------------------------------------------------------------------
+#  Pilotdaten der Zielhardware (DatenLogger, ESP32-C6 + MPU-6500)
+# ---------------------------------------------------------------------
+# Ordnerstruktur: <root>/<Position>/<nr>_<POS>_<aktivitaet>.csv
+#   Kopfzeile:  # position=... activity=... fs=100 ...
+#   Daten:      t_ms,ax,ay,az,gx,gy,gz  (LSB, +-16 g, +-2000 deg/s)
+# Der Unterordner bestimmt die Position (Right_Ankle und Left_Ankle
+# tragen beide position=ANKLE in der Kopfzeile).
+PILOT_FS = 100
+PILOT_ACC_LSB = 1.0 / 2048.0
+PILOT_GYR_LSB = 1.0 / 16.384
+
+
+def _read_pilot_csv(path):
+    rows = []
+    for zeile in Path(path).read_text(errors="ignore").splitlines():
+        teile = zeile.strip().split(",")
+        if not zeile or not zeile[0].isdigit() or len(teile) != 7:
+            continue                      # Kopf, abgeschnittene Zeilen
+        try:
+            rows.append([float(v) for v in teile])
+        except ValueError:
+            continue
+    if len(rows) < PILOT_FS:
+        return None
+    a = np.asarray(rows)
+    t, idx = np.unique(a[:, 0], return_index=True)
+    a = a[idx]
+    # Flash-Schreibzugriffe verzoegern einzelne Abtastungen: auf ein
+    # exaktes 100-Hz-Raster interpolieren, dann wie im Training
+    # heruntertasten.
+    raster = np.arange(t[0], t[-1], 1000.0 / PILOT_FS)
+    d = np.column_stack([np.interp(raster, t, a[:, k]) for k in range(1, 7)])
+    d[:, :3] *= PILOT_ACC_LSB
+    d[:, 3:] *= PILOT_GYR_LSB
+    return downsample(d, PILOT_FS, FS_TARGET).astype(np.float32)
+
+
+def pilot_impacts(data, min_rest_s=2.0, gyr_max=30.0, angle_min=40.0,
+                  lead_s=2.0):
+    """Aufprallindizes einer Sturzaufnahme ueber die Liegephase.
+
+    Ruhephasen (|Gyro| < gyr_max, |a| ~ 1 g, >= min_rest_s), deren
+    Schwerkraftrichtung um mehr als angle_min von der Stehhaltung zu
+    Beginn abweicht, gelten als Liegen nach einem Sturz. Der Aufprall
+    ist das Maximum von |a| in den lead_s Sekunden davor. Robuster als
+    eine Spitzenschwelle, da am Knoechel Klopfmarken und Aufstehen
+    oft staerker sind als der Sturz selbst.
+    """
+    fs = FS_TARGET
+    a = data[:, :3]
+    m = np.linalg.norm(a, axis=1)
+    gy = np.linalg.norm(data[:, 3:6], axis=1)
+    ker = np.ones(fs // 2) / (fs // 2)
+    still = ((np.convolve(gy, ker, "same") < gyr_max) &
+             (np.convolve(np.abs(m - 1), ker, "same") < 0.15))
+    if not still.any():
+        return []
+    i0 = int(np.argmax(still))
+    ref = a[i0:i0 + fs].mean(axis=0)
+    ref /= np.linalg.norm(ref)
+    out, start = [], None
+    for i, v in enumerate(np.r_[still, False]):
+        if v and start is None:
+            start = i
+        if not v and start is not None:
+            if i - start >= min_rest_s * fs:
+                g = a[start:i].mean(axis=0)
+                g /= np.linalg.norm(g)
+                if np.degrees(np.arccos(np.clip(g @ ref, -1, 1))) >= angle_min:
+                    lo = max(0, start - int(lead_s * fs))
+                    out.append(lo + int(np.argmax(m[lo:start + int(0.3 * fs)])))
+            start = None
+    return out
+
+
+def load_pilot(root, context_s=5.0, verbose=True):
+    """Pilotaufnahmen. ADL-Dateien sind je ein Trial; Sturzdateien
+    liefern je Aufprall einen Trial von +-context_s (impact_idx
+    gesetzt). 'subject' ist die Position, damit Gruppierungen je
+    Position moeglich sind."""
+    root = Path(root)
+    trials = []
+    for f in sorted(root.rglob("*.csv")):
+        pos = (f.parent.name.upper() if f.parent != root
+               else (re.match(r"\d+_([A-Z_]+?)_[a-z]", f.name) or [None, "UNK"])[1])
+        act = re.sub(r"^\d+_[A-Z_]+?_(?=[a-z])", "", f.stem)
+        x = _read_pilot_csv(f)
+        if x is None or len(x) < WIN_LEN:
+            continue
+        base = {"subject": pos, "position": pos, "activity": act,
+                "datei": f.name}
+        if not act.startswith("fall"):
+            trials.append({**base, "data": x, "label": 0, "impact_idx": None})
+            continue
+        ctx = int(context_s * FS_TARGET)
+        for c in pilot_impacts(x):
+            s, e = max(0, c - ctx), min(len(x), c + ctx)
+            if e - s >= WIN_LEN:
+                trials.append({**base, "data": x[s:e], "label": 1,
+                               "impact_idx": c - s})
+    if verbose:
+        for p in sorted({t["position"] for t in trials}):
+            sub = [t for t in trials if t["position"] == p]
+            n_f = sum(t["label"] for t in sub)
+            print(f"[Pilot {p}] {n_f} Stuerze, "
+                  f"{sum(len(t['data']) for t in sub if not t['label'])/FS_TARGET/60:.1f} min ADL")
+    return trials
+
+
+# ---------------------------------------------------------------------
+#  Orientierung: Rotation, Spiegelung, Augmentierung
+# ---------------------------------------------------------------------
+def rotate_windows(X, R, mirror_axis=None):
+    """Dreht Fenster (N,T,6) mit der Matrix R (3x3), optional mit
+    Spiegelung an der Ebene senkrecht zu mirror_axis. Die
+    Winkelgeschwindigkeit ist ein Pseudovektor: bei einer Spiegelung
+    wechseln die beiden anderen Gyro-Achsen das Vorzeichen."""
+    A = X[..., :3] @ R.T
+    G = X[..., 3:6] @ R.T
+    if mirror_axis is not None:
+        A = A.copy(); G = G.copy()
+        A[..., mirror_axis] *= -1
+        G[..., [k for k in range(3) if k != mirror_axis]] *= -1
+    return np.concatenate([A, G], axis=-1).astype(np.float32)
+
+
+def random_rotation_matrices(n, seed=0):
+    from scipy.spatial.transform import Rotation
+    return Rotation.random(n, random_state=seed).as_matrix()
+
+
+def augment_orientation(X, y, copies=1, mirror_p=0.5, seed=0):
+    """Haengt je Fenster `copies` zufaellig gedrehte (und mit
+    Wahrscheinlichkeit mirror_p gespiegelte) Kopien an. X muss
+    UNNORMIERT sein (g, deg/s); die Normalisierung folgt danach."""
+    rng = np.random.default_rng(seed)
+    Xs, ys = [X], [y]
+    for c in range(copies):
+        Rm = random_rotation_matrices(len(X), seed + 1000 * (c + 1))
+        A = np.einsum("nij,ntj->nti", Rm, X[..., :3])
+        G = np.einsum("nij,ntj->nti", Rm, X[..., 3:6])
+        spiegel = rng.random(len(X)) < mirror_p
+        ax = rng.integers(0, 3, len(X))
+        for k in range(3):
+            sel = spiegel & (ax == k)
+            A[sel, :, k] *= -1
+            for j in range(3):
+                if j != k:
+                    G[sel, :, j] *= -1
+        Xs.append(np.concatenate([A, G], axis=-1).astype(np.float32))
+        ys.append(y)
+    return np.concatenate(Xs), np.concatenate(ys)
+
+
 # =====================================================================
 #  4. MODELL UND AUSWERTUNG
 # =====================================================================
