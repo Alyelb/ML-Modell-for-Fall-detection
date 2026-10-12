@@ -43,17 +43,23 @@ Einstellungen:
 
 ## 3. Modell einbinden
 
+`modell.h` wird automatisch erzeugt (int8-Quantisierung, Kontrolle
+int8 gegen float, Liste der Operatoren):
+
 ```bash
-# TFLite-Datei aus dem Colab-Lauf 01 holen, dann:
-xxd -i fall_model_int8.tflite > modell_roh.h
+pip install tensorflow
+python tools/export_firmware_model.py fall_model_lowerlimb.keras Pilotdaten/
 ```
 
-In `modell.h`:
-1. `MODELL_VERFUEGBAR` auf `1` setzen
-2. Den Array-Inhalt aus `modell_roh.h` einfügen
-3. Array in `modell_tflite` umbenennen
-4. `alignas(16)` davor stehen lassen — ohne Ausrichtung schlägt das
-   Laden fehl
+Der Pilotordner dient nur der Kalibrierung der int8-Wertebereiche.
+Die aktuelle `modell.h` enthält das Lower-Limb-Modell (B2, 79,6 KB,
+99,3 % gleiche Entscheidungen wie float auf 2546 Pilotfenstern).
+
+**Einbaulage:** `R_EINBAU` in `CleverSole.ino` dreht die Sensorachsen in
+den Trainingsrahmen (Schienbein/Knöchel, Schwerkraft auf −Y). Für den
+Knöchel mit USB-Buchse oben bleibt die Einheitsmatrix. Für die Sohle
+(Board flach, Schwerkraft auf +Z) ist die Drehung aus der tatsächlichen
+Einbaulage festzulegen.
 
 ## 4. In Stufen testen
 
@@ -85,10 +91,14 @@ Auf die Inferenzzeit achten. Bei über 150 ms wird das Intervall von
 
 ## 5. Bekannte Fallstricke
 
-**TensorFlow Lite Micro auf dem ESP32-C6.** Der C6 ist RISC-V. Die
-gängigen Arduino-TFLM-Bibliotheken sind auf ARM oder den älteren
-Xtensa-ESP32 ausgelegt. Läuft es in der Arduino IDE nicht, ist der
-verlässliche Weg ESP-IDF mit der Komponente `esp-tflite-micro`:
+**TensorFlow Lite Micro auf dem ESP32-C6.** Der Arduino-ESP32-Core 3.x
+bringt `esp-tflite-micro` bereits mit; eine zusätzliche Bibliothek ist
+dann nicht nötig. Die alte Bibliothek `TensorFlowLite_ESP32` ist
+veraltet und nicht zu verwenden. Findet der Compiler
+`tensorflow/lite/micro/micro_interpreter.h` nicht, im
+Bibliotheksverwalter `Chirale_TensorFlowLite` installieren (wird
+automatisch eingebunden). Läuft beides nicht, ist der verlässliche Weg
+ESP-IDF mit der Komponente `esp-tflite-micro`:
 
 ```bash
 idf.py add-dependency "espressif/esp-tflite-micro"
@@ -103,7 +113,8 @@ erfolgreichem Start ausgegeben.
 
 **Operatoren fehlen.** Fehlt einer, nennt TFLM ihn beim Start. Dann in
 `modellInit()` ein `resolver.AddXxx()` ergänzen und den Zähler
-`MicroMutableOpResolver<8>` erhöhen.
+`MicroMutableOpResolver<10>` erhöhen. Die benötigten Operatoren
+stehen im Kopfkommentar von `modell.h`.
 
 ## 6. Was noch offen ist
 

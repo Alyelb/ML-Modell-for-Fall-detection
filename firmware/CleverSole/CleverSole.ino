@@ -39,17 +39,19 @@
 // Ablauflogik
 #define SCHRITTE_START      10      // Inferenz erst nach so vielen Schritten
 #define RUHE_BIS_SCHLAF_MS  120000  // 2 Minuten ohne Bewegung
-#define INFERENZ_INTERVALL  5       // alle 5 neuen 50-Hz-Werte (0,1 s)
+#define INFERENZ_INTERVALL  10      // alle 10 neuen 50-Hz-Werte (0,2 s)
 
 // Schrittzaehler
 #define SCHRITT_SCHWELLE_G  1.35f
 #define SCHRITT_MIN_MS      250     // Entprellung
 #define RUHE_SCHWELLE_G     0.08f   // Abweichung von 1 g gilt als Ruhe
 
-// Voting (vorlaeufig; auf Pilotdaten neu bestimmen)
-#define VOTE_N              2
-#define VOTE_M              3
-#define VOTE_SCHWELLE       0.7f
+// Voting: 3 von 5 bei 0,2 s Schrittweite, Schwelle 0,5
+// (Pilotdaten Knoechel, Lower-Limb-Modell: 95-100 % der Stuerze
+//  erkannt, Fehlalarm-Ereignisse gegenueber 1-von-1 etwa halbiert)
+#define VOTE_N              3
+#define VOTE_M              5
+#define VOTE_SCHWELLE       0.5f
 
 // Batterie (LiPo)
 #define BATT_LEER_MV        3300
@@ -77,6 +79,24 @@ static uint8_t chip_id = 0;
 // +-16 g  -> 2048 LSB/g ; +-2000 dps -> 16.384 LSB/(deg/s)
 static const float ACC_LSB = 1.0f / 2048.0f;
 static const float GYR_LSB = 1.0f / 16.384f;
+
+// Einbaulage: dreht die Sensorachsen in den Koordinatenrahmen, in dem
+// das Modell trainiert wurde (Schienbein/Knoechel: Schwerkraft auf -Y,
+// USB-Buchse oben). Einheitsmatrix = Sensor sitzt wie beim Knoechel.
+// Liegt das Board flach in der Sohle (Schwerkraft auf +Z), muss hier
+// die passende Drehung stehen -- sie ist aus der tatsaechlichen
+// Einbaulage zu bestimmen, nicht auszuprobieren (Bericht Kap. 6.7).
+static const float R_EINBAU[3][3] = {
+  {1.0f, 0.0f, 0.0f},
+  {0.0f, 1.0f, 0.0f},
+  {0.0f, 0.0f, 1.0f},
+};
+
+static void einbaulageAnwenden(float *v) {        // v[0..2]
+  float x = v[0], y = v[1], z = v[2];
+  for (int i = 0; i < 3; i++)
+    v[i] = R_EINBAU[i][0] * x + R_EINBAU[i][1] * y + R_EINBAU[i][2] * z;
+}
 
 // ---------------------------------------------------------------
 //  FENSTER
@@ -163,6 +183,8 @@ static bool mpuLeseMessung(float *out) {
   out[3] = roh[4] * GYR_LSB;
   out[4] = roh[5] * GYR_LSB;
   out[5] = roh[6] * GYR_LSB;
+  einbaulageAnwenden(out);          // Beschleunigung
+  einbaulageAnwenden(out + 3);      // Winkelgeschwindigkeit
   return true;
 }
 
@@ -372,7 +394,11 @@ static void schrittPruefen(float betrag, uint32_t jetzt) {
 #include "modell.h"          // fall_model_int8.tflite als C-Array
 
 #if MODELL_VERFUEGBAR
-  #include <TensorFlowLite_ESP32.h>
+  // Arduino-ESP32-Core 3.x bringt esp-tflite-micro mit. Fehlt der
+  // Header, Bibliothek "Chirale_TensorFlowLite" installieren.
+  #if __has_include(<Chirale_TensorFlowLite.h>)
+    #include <Chirale_TensorFlowLite.h>
+  #endif
   #include "tensorflow/lite/micro/micro_interpreter.h"
   #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
   #include "tensorflow/lite/schema/schema_generated.h"
@@ -389,13 +415,17 @@ static void schrittPruefen(float betrag, uint32_t jetzt) {
       Serial.println("Modell: falsche Schema-Version");
       return false;
     }
-    static tflite::MicroMutableOpResolver<8> resolver;
+    // Genau die Operatoren aus modell.h (Kopfkommentar). Wird ein
+    // anderes Modell eingespielt und fehlt hier ein Operator, schlaegt
+    // AllocateTensors mit "Didn't find op" fehl.
+    static tflite::MicroMutableOpResolver<10> resolver;
     resolver.AddConv2D();
-    resolver.AddDepthwiseConv2D();
+    resolver.AddExpandDims();         // Conv1D -> Conv2D
     resolver.AddMaxPool2D();
     resolver.AddMean();               // GlobalAveragePooling
     resolver.AddFullyConnected();
-    resolver.AddRelu();
+    resolver.AddAdd();                // BatchNorm (nicht gefaltet)
+    resolver.AddMul();
     resolver.AddLogistic();           // Sigmoid
     resolver.AddReshape();
 
