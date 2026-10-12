@@ -43,23 +43,23 @@ Einstellungen:
 
 ## 3. Modell einbinden
 
-`modell.h` wird automatisch erzeugt (int8-Quantisierung, Kontrolle
-int8 gegen float, Liste der Operatoren):
+In `modell.h` wird mit `EINBAU_SOHLE` gewählt:
+
+| `EINBAU_SOHLE` | Einbau | Modell |
+|---|---|---|
+| `1` (Standard) | flach in der linken Sohle, Bauteilseite oben, USB-C zur Außenseite/Ferse | Lower-Limb, auf Sohlen-Pilotdaten nachtrainiert (`modell_sohle.h`) |
+| `0` | seitlich am Knöchel, USB-C oben | Lower-Limb (`modell_knoechel.h`) |
+
+Die passende Achsdrehung (`R_EINBAU`) wird mit ausgewählt. Wird das
+Board anders eingebaut, stimmt sie nicht mehr -- dann sinkt die
+Erkennung deutlich (Bericht, Abschnitt Sensororientierung).
+
+Modelldateien neu erzeugen:
 
 ```bash
 pip install tensorflow
-python tools/export_firmware_model.py fall_model_lowerlimb.keras Pilotdaten/
+python tools/export_firmware_model.py <modell>.keras Pilotdaten/ modell_sohle.h
 ```
-
-Der Pilotordner dient nur der Kalibrierung der int8-Wertebereiche.
-Die aktuelle `modell.h` enthält das Lower-Limb-Modell (B2, 79,6 KB,
-99,3 % gleiche Entscheidungen wie float auf 2546 Pilotfenstern).
-
-**Einbaulage:** `R_EINBAU` in `CleverSole.ino` dreht die Sensorachsen in
-den Trainingsrahmen (Schienbein/Knöchel, Schwerkraft auf −Y). Für den
-Knöchel mit USB-Buchse oben bleibt die Einheitsmatrix. Für die Sohle
-(Board flach, Schwerkraft auf +Z) ist die Drehung aus der tatsächlichen
-Einbaulage festzulegen.
 
 ## 4. In Stufen testen
 

@@ -11,9 +11,11 @@ Aufruf (im Repo-Ordner):
     Argument 2: Ordner mit Pilotaufnahmen (DatenLogger-CSV). Dient als
                 repraesentativer Datensatz fuer die int8-Kalibrierung
                 und zur Kontrolle, dass int8 und float uebereinstimmen.
+    Argument 3: (optional) Name der Zieldatei in firmware/CleverSole/,
+                z. B. modell_sohle.h. Standard: modell_knoechel.h
 
 Ausgabe:
-    firmware/CleverSole/modell.h     C-Array, 16-Byte-ausgerichtet
+    firmware/CleverSole/<Argument 3>   C-Array, 16-Byte-ausgerichtet
     <modell>_int8.tflite             zum Archivieren
     Liste der verwendeten Operatoren (muss zum Resolver in
     CleverSole.ino passen).
@@ -94,7 +96,9 @@ def main():
     # --- modell.h schreiben ---------------------------------------------
     hexz = [", ".join(f"0x{b:02x}" for b in blob[i:i + 12])
             for i in range(0, len(blob), 12)]
-    ziel = Path(__file__).resolve().parents[1] / "firmware" / "CleverSole" / "modell.h"
+    name = sys.argv[3] if len(sys.argv) > 3 else "modell_knoechel.h"
+    ziel = Path(__file__).resolve().parents[1] / "firmware" / "CleverSole" / name
+    waechter = name.upper().replace(".", "_")
     ziel.write_text(
         "/*\n"
         " * modell.h  --  automatisch erzeugt von tools/export_firmware_model.py\n"
@@ -104,7 +108,7 @@ def main():
         f" * int8/float  : {gleich:.2%} gleiche Entscheidungen (Pilotdaten)\n"
         " * Nicht von Hand bearbeiten -- neu erzeugen.\n"
         " */\n"
-        "#ifndef MODELL_H\n#define MODELL_H\n\n"
+        f"#ifndef {waechter}\n#define {waechter}\n\n"
         "#define MODELL_VERFUEGBAR 1\n\n"
         f"alignas(16) const unsigned char modell_tflite[] = {{\n  "
         + ",\n  ".join(hexz) + "\n};\n"

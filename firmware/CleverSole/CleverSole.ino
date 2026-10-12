@@ -81,16 +81,10 @@ static const float ACC_LSB = 1.0f / 2048.0f;
 static const float GYR_LSB = 1.0f / 16.384f;
 
 // Einbaulage: dreht die Sensorachsen in den Koordinatenrahmen, in dem
-// das Modell trainiert wurde (Schienbein/Knoechel: Schwerkraft auf -Y,
-// USB-Buchse oben). Einheitsmatrix = Sensor sitzt wie beim Knoechel.
-// Liegt das Board flach in der Sohle (Schwerkraft auf +Z), muss hier
-// die passende Drehung stehen -- sie ist aus der tatsaechlichen
-// Einbaulage zu bestimmen, nicht auszuprobieren (Bericht Kap. 6.7).
-static const float R_EINBAU[3][3] = {
-  {1.0f, 0.0f, 0.0f},
-  {0.0f, 1.0f, 0.0f},
-  {0.0f, 0.0f, 1.0f},
-};
+// das Modell trainiert wurde (Knoechel: Schwerkraft auf -Y, USB oben).
+// Auswahl in modell.h (EINBAU_SOHLE).
+#include "modell.h"
+static const float R_EINBAU[3][3] = R_EINBAU_WERTE;
 
 static void einbaulageAnwenden(float *v) {        // v[0..2]
   float x = v[0], y = v[1], z = v[2];
@@ -391,7 +385,7 @@ static void schrittPruefen(float betrag, uint32_t jetzt) {
 // ---------------------------------------------------------------
 //  INFERENZ
 // ---------------------------------------------------------------
-#include "modell.h"          // fall_model_int8.tflite als C-Array
+// Modell: siehe modell.h (bereits oben eingebunden)
 
 #if MODELL_VERFUEGBAR
   // Arduino-ESP32-Core 3.x bringt esp-tflite-micro mit. Fehlt der
