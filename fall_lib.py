@@ -1139,6 +1139,34 @@ def random_rotation_matrices(n, seed=0):
     return Rotation.random(n, random_state=seed).as_matrix()
 
 
+def rotation_between(a, b):
+    """Kleinste Drehung (3x3), die Richtung a auf Richtung b abbildet
+    (Rodrigues). Die Drehung um b selbst bleibt unbestimmt -- sie ist
+    aus der Schwerkraft allein nicht ableitbar."""
+    a = np.asarray(a, float) / np.linalg.norm(a)
+    b = np.asarray(b, float) / np.linalg.norm(b)
+    v, c = np.cross(a, b), float(a @ b)
+    if c < -0.9999:                         # entgegengesetzt: 180 Grad
+        o = np.eye(3)[np.argmin(np.abs(a))]
+        v = np.cross(a, o); v /= np.linalg.norm(v)
+        return 2 * np.outer(v, v) - np.eye(3)
+    K = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + K + K @ K / (1 + c)
+
+
+def mean_gravity(trials, gyr_max=20.0, max_trials=500):
+    """Mittlere Schwerkraftrichtung in Ruhe (|Gyro| < gyr_max) ueber
+    ADL-Trials. Dient zum Vergleich der Einbaulage zweier Datensaetze."""
+    acc = []
+    for t in [t for t in trials if not t["label"]][:max_trials]:
+        d = t["data"]
+        ruhe = np.linalg.norm(d[:, 3:6], axis=1) < gyr_max
+        if ruhe.sum() > FS_TARGET:
+            acc.append(d[ruhe, :3].mean(axis=0))
+    g = np.mean(acc, axis=0)
+    return g / np.linalg.norm(g)
+
+
 def augment_orientation(X, y, copies=1, mirror_p=0.5, seed=0):
     """Haengt je Fenster `copies` zufaellig gedrehte (und mit
     Wahrscheinlichkeit mirror_p gespiegelte) Kopien an. X muss
