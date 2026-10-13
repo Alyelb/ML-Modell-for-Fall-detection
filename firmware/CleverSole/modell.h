@@ -1,9 +1,10 @@
 /*
  * modell.h  --  Auswahl von Modell und Einbaulage
  *
- * EINBAU_SOHLE 1 : Board flach in der linken Sohle, Bauteilseite
- *                  oben, USB-C zur Aussenseite (Ferse). Modell auf
- *                  Pilotdaten der Sohle nachtrainiert.
+ * EINBAU_SOHLE 1 : Board flach in der Sohle, Bauteilseite oben,
+ *                  USB-C zur Aussenseite (Ferse). Modell B2r:
+ *                  Lower-Limb mit Orientierungs-Augmentierung, OHNE
+ *                  Sohlendaten trainiert (robust gegen Einbaulage).
  * EINBAU_SOHLE 0 : Board seitlich am Knoechel, USB-C oben.
  *                  Lower-Limb-Modell (CAPPIMU + ImbalanSense).
  *
@@ -17,7 +18,7 @@
 #if EINBAU_SOHLE
   #include "modell_sohle.h"
   // Sohle -> Trainingsrahmen Knoechel: x' = x, y' = -z, z' = y
-  // (aus Schwerkraft und Liegelage nach seitlichen Stuerzen bestimmt)
+  // (aus der Einbaugeometrie: Sohlennormale -> Hochachse Knoechel)
   #define R_EINBAU_WERTE { {1.0f, 0.0f,  0.0f}, \
                            {0.0f, 0.0f, -1.0f}, \
                            {0.0f, 1.0f,  0.0f} }

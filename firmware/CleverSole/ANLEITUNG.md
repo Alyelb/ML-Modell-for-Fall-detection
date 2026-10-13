@@ -47,7 +47,7 @@ In `modell.h` wird mit `EINBAU_SOHLE` gewählt:
 
 | `EINBAU_SOHLE` | Einbau | Modell |
 |---|---|---|
-| `1` (Standard) | flach in der linken Sohle, Bauteilseite oben, USB-C zur Außenseite/Ferse | Lower-Limb, auf Sohlen-Pilotdaten nachtrainiert (`modell_sohle.h`) |
+| `1` (Standard) | flach in der Sohle, Bauteilseite oben, USB-C zur Außenseite/Ferse | B2r: Lower-Limb mit Orientierungs-Augmentierung, ohne Sohlendaten (`modell_sohle.h`) |
 | `0` | seitlich am Knöchel, USB-C oben | Lower-Limb (`modell_knoechel.h`) |
 
 Die passende Achsdrehung (`R_EINBAU`) wird mit ausgewählt. Wird das

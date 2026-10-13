@@ -312,13 +312,49 @@ located via the subsequent lying phase, not the highest peak.
 **Sensor orientation.** Rotating the pilot recordings in software:
 mirroring and rotation about the leg axis barely matter (model was
 trained on both shins), but arbitrary 3-D rotations drop sensitivity to
-as low as 14 %. The mounting orientation in the insole is part of the
-model specification. Notebook 11 tests rotation augmentation.
+as low as 14 %. Mirroring the *left* CAPPIMU sensors reproduces the
+right-side results (arm 6 → 60 %, wrist 10 → 60 %, shin 17 → 42 %), so
+the left/right gap is entirely axis orientation (notebook 11).
+Rotation augmentation (**B2r**) raises shin sensitivity under random
+rotation from 60.6 % to 78.0 % (+17.3 pp, 5/5 folds) and cuts sole
+false alarms (ImbalanSense 22.6 → 3.9/h, Smart-Insole 58.7 → 17.7/h).
+
+**Operation on the pilot data** (alarm = 3 of 5 windows > 0.5 at 0.2 s
+step, fall detected if an alarm fires ≤ 1 s after impact; falls
+detected / false-alarm events):
+
+| Model | Waist | Ankle R | Ankle L |
+|---|---|---|---|
+| Base (SisFall), raw | 3/22 / 14 | 17/23 / 51 | 13/22 / 42 |
+| Base, axes aligned to SisFall | 15/22 / 14 | – | – |
+| B2 (lower limb) | 15/22 / 82 | 22/23 / 27 | 20/22 / 39 |
+| B2r (lower limb, augmented) | 16/22 / 63 | 20/23 / 17 | 11/22 / 18 |
+| B2r, left ankle rotated 180° | – | – | 20/22 / 7 |
+
+SisFall waist axes: +z forward, +y down (gravity), +x right. The own
+waist sensor had +x down and +z forward (from lying phase after
+forward/backward falls) → fixed rotation x_S = −y, y_S = x, z_S = z
+plus tilt correction. The left ankle sensor was rotated 180° about the
+vertical against the right one.
+
+**Firmware model.** The prototype targets the insole. Insole recordings
+were incomplete and are not used. The firmware uses **B2r** (no insole
+data) with a fixed mounting rotation insole → ankle frame
+(x' = x, y' = −z, z' = y); int8 79.6 KB, 96 % agreement with float.
+Insole performance is therefore *not measured*.
+
+**Threshold features per activity** (orientation-free; pilot data,
+one person, in-sample): peaks alone do not separate falls at the ankle
+(walking/jogging/jumping reach 1.6–10.7 g). Orientation change > 40°
+plus stillness (std |a| < 0.2 g in 1–3 s after) with |a| > 1.5 g finds
+34/45 ankle falls with 0 false alarms; waist (> 50°, < 0.05 g) 16/22,
+0 false alarms. Full min/max table in the report (section
+"Kennwerte je Aktivität").
 
 53 false alarms per hour on unseen people is still too many for an
 alarm system; temporal voting and long-lie detection remain necessary.
-No source contains falls *at the sole* — that gap is what the pilot
-recordings address (pending).
+No source contains falls *at the sole*; a multi-person insole
+recording is the open next step.
 
 ---
 
@@ -422,7 +458,7 @@ serial output goes to the UART pins instead of USB).
 - [x] Foot-domain datasets: loaders and evaluation notebook
 - [x] Placement curve and lower-limb training (notebook 10)
 - [x] Pilot recordings at waist and both ankles (target hardware)
-- [ ] Pilot recordings in the insole / on top of the foot
+- [ ] Pilot recordings in the insole (multi-person, both feet)
 - [ ] Orientation test and training matrix (notebook 11)
 - [ ] Voting parameters from pilot data
 - [ ] Long-lie detection

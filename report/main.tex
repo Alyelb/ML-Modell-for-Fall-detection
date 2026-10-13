@@ -2715,32 +2715,71 @@ sinnvoll ableitbar. Eine N-von-M-Regel (3 von 5, Schwelle $0{,}5$)
 halbiert die Fehlalarm-Ereignisse bei einer Ereignis-Sensitivität von
 $95$--$100\,\%$.
 
-\textbf{Sohle.} Zusätzlich wurde der Sensor flach in der linken Sohle
-getragen (Bauteilseite oben, USB-Buchse zur Außenseite), mit 46
-Stürzen sowie Gehen, Joggen und Treppen (rund $3$\,min). In dieser Lage
-liegt die Schwerkraft auf einer anderen Achse als am Knöchel, und das
-Lower-Limb-Modell erkennt unverändert nur $61\,\%$ der Stürze
-(Ereignis, 1 von 1). Wird die Einbaulage durch eine feste Drehung in
-den Achsrahmen des Knöchels überführt -- bestimmt aus der
-Schwerkraftrichtung und der Liegelage nach seitlichen Stürzen, nicht
-aus den Ergebnissen --, steigt die Erkennung auf $98\,\%$. Zugleich
-lösen dann jedoch $17$ Fehlalarm-Ereignisse in $1{,}7$\,min Gehen aus
-(3 von 5): Der Gang an der Sohle unterscheidet sich vom Gang am
-Schienbein.
+\textbf{Vergleich der Modelle im Betrieb.} Tabelle~\ref{tab:fuss_betrieb}
+wendet das Basismodell (SisFall), das Lower-Limb-Modell (B2) und
+dessen orientierungsaugmentierte Variante (B2r,
+Abschnitt~\ref{sec:fuss_orient}) wie die Firmware an: Fenster alle
+$0{,}2$\,s, Alarm bei 3 von 5 Fenstern über $0{,}5$. Ein Sturz gilt als
+erkannt, wenn spätestens $1$\,s nach dem Aufprall ein Alarm fällt; jeder
+Alarm in einer Alltagsaufnahme zählt als Fehlalarm-Ereignis. Die
+Alltagsaufnahmen enthalten gezielt schwierige Bewegungen (Springen,
+kräftiges Hinsetzen, Aufheben), eine Rate je Stunde wird daher nicht
+angegeben.
 
-Ein Nachtraining auf den Sohlenaufnahmen behebt das. Dreifach
-kreuzvalidiert über die Aufnahmen (je Falte ein Drittel der Stürze und
-der Alltagsaufnahmen zurückgehalten) bleibt die Erkennung bei
-$96\,\%$ (3 von 5), die Fehlalarme sinken von 19 auf 0 Ereignisse in
-$2{,}9$\,min. Das Ergebnis stammt von einer Person, einer Sohle und
-wenigen Minuten Alltag ohne Hinsetzen, Springen oder Aufheben; es
-zeigt die Richtung, belegt aber keinen Einsatzwert. Das auf allen
-Sohlenaufnahmen nachtrainierte Modell ist das derzeit auf dem Prototyp
-eingesetzte.
+\begin{table}[H]
+\centering
+\caption{Betriebsbewertung auf den Pilotdaten (3 von 5, Schwelle
+         $0{,}5$). Erkannte Stürze / Fehlalarm-Ereignisse; Alltag:
+         Hüfte $9{,}3$\,min, Knöchel rechts $6{,}2$\,min, links
+         $6{,}8$\,min.}
+\label{tab:fuss_betrieb}
+\small
+\begin{tabularx}{\textwidth}{X c c c}
+\toprule
+\textbf{Modell} & \textbf{Hüfte} & \textbf{Knöchel rechts} & \textbf{Knöchel links} \\
+\midrule
+Basis (SisFall), Rohdaten          & 3/22 \;/\; 14  & 17/23 \;/\; 51 & 13/22 \;/\; 42 \\
+Basis, Achsen wie SisFall          & 15/22 \;/\; 14 & -- & -- \\
+B2 (Lower-Limb)                    & 15/22 \;/\; 82 & 22/23 \;/\; 27 & 20/22 \;/\; 39 \\
+B2r (Lower-Limb, augmentiert)      & 16/22 \;/\; 63 & 20/23 \;/\; 17 & 11/22 \;/\; 18 \\
+B2r, links $180^{\circ}$ gedreht   & -- & -- & 20/22 \;/\; 7 \\
+\bottomrule
+\end{tabularx}
+\end{table}
 
-An der Hüfte ist das Lower-Limb-Modell erwartungsgemäß schwächer, da
-es auf Beindaten angepasst wurde. \offen{Vergleich mit dem
-Basismodell (SisFall) an allen drei Positionen aus Notebook~09.}
+\textbf{Hüfte: Achsen wie in SisFall.} SisFall definiert die Achsen
+des Gürtelsensors als $+z$ nach vorn, $+y$ in Schwerkraftrichtung und
+$+x$ nach rechts \cite{sucerquia2017sisfall}. Am eigenen Prototyp zeigte die
+Schwerkraft im Stand auf $-x$ (Platine hochkant, um rund $25^{\circ}$
+geneigt), und die Liegelage nach Vorwärts- und Rückwärtsstürzen weist
+$+z$ als Vorwärtsrichtung aus. Daraus folgt eine feste Drehung
+($x_S = -y$, $y_S = x$, $z_S = z$), ergänzt um den Ausgleich der
+Neigung; beides ist aus der Einbaulage bestimmt, nicht aus den
+Ergebnissen. Das unveränderte Basismodell erkennt an der Hüfte danach
+15 statt 3 der 22 Stürze bei unveränderter Zahl an Fehlalarmen. Das
+Versagen des Basismodells an der eigenen Hüfte war also überwiegend
+eine Frage der Achsenlage, nicht der Hardware.
+
+\textbf{Knöchel.} Beide Lower-Limb-Varianten erkennen am rechten
+Knöchel nahezu alle Stürze (22 bzw.\ 20 von 23). B2r senkt dort die
+Fehlalarme von 27 auf 17. Am
+linken Knöchel fällt B2r ohne Ausrichtung auf 11 von 22 Stürzen; die
+Liegelage nach Vorwärts- und Rückwärtsstürzen zeigt, dass der linke
+Sensor gegenüber dem rechten um $180^{\circ}$ um die Hochachse gedreht
+war (USB-Buchse jeweils oben, Bauteilseite jeweils außen). Mit dieser
+festen Drehung erkennt B2r 20 von 22 Stürzen bei 7 Fehlalarmen.
+
+\textbf{Modell für den Prototyp.} Die Firmware ist für die Sohle
+vorgesehen. Für die Sohle liegen keine verwertbaren eigenen Stürze vor,
+das Modell wird daher ohne Sohlendaten gewählt: B2r, da es gegenüber
+Drehungen am robustesten ist (Abschnitt~\ref{sec:fuss_orient}). Die
+Einbaulage der Sohle (Platine flach, Bauteilseite oben, USB-Buchse zur
+Außenseite der Ferse) wird vor der Inferenz durch eine feste Drehung
+in den Achsrahmen des Knöchels überführt ($x' = x$, $y' = -z$,
+$z' = y$). Als int8-Modell ($79{,}6$\,KB) trifft es auf den Pilotfenstern
+in $96\,\%$ der Fälle dieselbe Entscheidung wie das Gleitkommamodell.
+Wie gut es Stürze in der Sohle erkennt, ist damit nicht gemessen,
+sondern nur aus der Knöchelposition übertragen.
 
 %------------------------------------------------------------------
 \section{Einfluss der Sensororientierung}
@@ -2763,6 +2802,15 @@ Kanälen und mit anderem Vorzeichen. Die Betragsmerkmale des Random
 Forest sind dagegen unabhängig von der Orientierung; nach einer
 beliebigen Drehung und Spiegelung weichen sie um weniger als $10^{-7}$
 (relativ) ab.
+
+\textbf{Spiegeltest.} Wird die linke Seite rechnerisch an der
+$xz$-Ebene gespiegelt ($y \to -y$, Gyroskop als Pseudovektor
+behandelt), erreicht das Basismodell dort die Werte der rechten Seite:
+Oberarm $6{,}2 \to 60{,}2\,\%$, Handgelenk $9{,}9 \to 60{,}3\,\%$,
+Schienbein $16{,}6 \to 41{,}9\,\%$. Umgekehrt fällt die gespiegelte
+rechte Seite auf $4{,}5$, $7{,}5$ und $17{,}0\,\%$ (Notebook~11, Teil~A).
+Der Seitenunterschied ist damit vollständig durch die Achsenlage
+erklärt.
 
 \textbf{Prüfung an eigenen Daten.} Die Knöchelaufnahmen des
 Pilotversuchs wurden rechnerisch gedreht bzw.\ gespiegelt und erneut
@@ -2811,13 +2859,77 @@ ist das Ergebnis nicht mehr vorhersagbar.
 \item Für Robustheit gegenüber Kippung kommen eine
       Rotationsaugmentierung im Training oder orientierungsunabhängige
       Eingänge (Beträge, Ausrichtung an der Schwerkraft) in Betracht.
-      \offen{Ergebnis der Rotationsaugmentierung (Notebook~11, B2r gegenüber B2).}
+      Eine Rotationsaugmentierung (je Fenster eine zufällig gedrehte,
+      mit $50\,\%$ Wahrscheinlichkeit gespiegelte Kopie; Modell B2r)
+      wurde in Notebook~11 fünffach kreuzvalidiert. Gegenüber B2
+      steigt die Sensitivität am Schienbein bei beliebiger Drehung von
+      $60{,}6$ auf $78{,}0\,\%$ ($+17{,}3$\,pp, 95-\%-KI $8{,}9$--$25{,}8$,
+      5 von 5 Falten), in Originallage von $80{,}6$ auf $85{,}0\,\%$; die
+      Fehlalarme sinken an der Sohle (ImbalanSense) von $22{,}6$ auf
+      $3{,}9$ und extern (Smart-Insole) von $58{,}7$ auf $17{,}7$ je
+      Stunde. Alle Unterschiede sind signifikant. Die Augmentierung
+      kostet also nichts und macht das Modell zugleich robuster.
 \end{enumerate}
 
 Die Orientierung ist damit eine eigene, bislang wenig beachtete
 Fehlerquelle beim Übertrag zwischen Datensätzen: Unterschiede, die auf
 den ersten Blick der Position oder der Sensorik zugeschrieben würden,
 können allein aus der Achsenlage folgen.
+
+%------------------------------------------------------------------
+\section{Kennwerte je Aktivität}
+\label{sec:fuss_kennwerte}
+
+Ergänzend zum CNN wurden aus den Pilotdaten einfache, von der
+Orientierung unabhängige Kennwerte je Ereignis bestimmt: bei Stürzen
+um den Aufprall, im Alltag um jede Spitze von $|a| > 1{,}3$\,g
+(Tabelle~\ref{tab:fuss_kennwerte}). Betrachtet werden die Spitze von
+$|a|$ und $|\omega|$, die Lageänderung (Winkel zwischen der
+Schwerkraftrichtung $1$\,s vor und $1$--$3$\,s nach dem Ereignis) und
+die Ruhe danach (Standardabweichung von $|a|$ in $1$--$3$\,s).
+
+\begin{table}[H]
+\centering
+\caption{Kennwerte je Aktivität am rechten Knöchel (Minimum--Maximum
+         über alle Ereignisse; links und an der Hüfte ähnlich, siehe
+         Repository).}
+\label{tab:fuss_kennwerte}
+\small
+\begin{tabularx}{\textwidth}{X c c c c c}
+\toprule
+\textbf{Aktivität} & \textbf{n} & \textbf{$|a|_{\max}$ [g]} &
+\textbf{$|\omega|_{\max}$ [$^{\circ}$/s]} & \textbf{Lage [$^{\circ}$]} &
+\textbf{Ruhe [g]} \\
+\midrule
+Sturz rückwärts & 5  & 2,4--9,5  & 167--360 & 14--76  & 0,00--0,07 \\
+Sturz vorwärts  & 6  & 1,8--3,7  & 52--190  & 11--101 & 0,00--0,12 \\
+Sturz auf Knie  & 5  & 2,1--9,6  & 233--628 & 95--108 & 0,00--0,06 \\
+Sturz seitlich  & 7  & 2,3--3,9  & 210--279 & 14--99  & 0,00--0,10 \\
+\midrule
+Gehen           & 83 & 1,6--2,9  & 293--453 & 0--9    & 0,20--0,62 \\
+Joggen          & 31 & 3,5--6,5  & 334--437 & 1--8    & 0,61--0,96 \\
+Treppe auf      & 9  & 2,3--3,6  & 144--179 & 1--6    & 0,45--0,57 \\
+Treppe ab       & 11 & 1,8--2,5  & 188--240 & 0--15   & 0,32--0,43 \\
+kräftig setzen  & 7  & 1,3--2,9  & 39--161  & 4--25   & 0,01--0,28 \\
+Springen        & 10 & 5,5--10,7 & 198--410 & 1--22   & 0,00--0,06 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Die Spitzenwerte allein trennen Stürze nicht vom Alltag: Gehen,
+Joggen und Springen erreichen am Knöchel dieselben oder höhere
+Beschleunigungen als die Stürze ($1{,}8$--$9{,}6$\,g). Trennend sind
+die Lageänderung und die Ruhe danach. Die Regel
+$|a|_{\max} > 1{,}5$\,g, Lage $> 40^{\circ}$ und Ruhe $< 0{,}2$\,g
+erkennt an beiden Knöcheln 34 von 45 Stürzen ohne Fehlalarm; an der
+Hüfte erkennt $|a|_{\max} > 1{,}5$\,g, Lage $> 50^{\circ}$, Ruhe
+$< 0{,}05$\,g 16 von 22 Stürzen ohne Fehlalarm. Übersehen werden vor
+allem Vorwärts- und Rückwärtsstürze, nach denen der Unterschenkel
+annähernd in seiner Lage bleibt. Die Schwellen sind an denselben
+Daten einer Person bestimmt und daher optimistisch; Liegen ohne
+Aufprall und langes Stillstehen nach einem Sprung sind nicht
+abgedeckt. Sie eignen sich als zweite Stufe hinter dem CNN, die einen
+Alarm erst nach festgestellter Lageänderung und Ruhe bestätigt.
 
 %------------------------------------------------------------------
 \section{Zwischenfazit}
@@ -2833,7 +2945,12 @@ können allein aus der Achsenlage folgen.
       Sensitivität. Training auf beiden Körperseiten macht das Modell
       gegenüber Spiegelung robust, nicht aber gegenüber beliebiger
       Drehung (Se $14$--$91\,\%$, Abschnitt~\ref{sec:fuss_orient}).
-      Die Einbaulage ist daher festzulegen.
+      Eine Rotationsaugmentierung (B2r) hebt die Sensitivität bei
+      beliebiger Drehung signifikant um $17$\,pp und senkt zugleich die
+      Fehlalarme. An der eigenen Hüfte steigt die Erkennung des
+      unveränderten Basismodells allein durch Ausrichtung der Achsen
+      wie in SisFall von 3 auf 15 von 22 Stürzen. Die Einbaulage ist
+      daher festzulegen und vor der Inferenz auszugleichen.
 \item \textbf{Auf der eigenen Hardware am Knöchel einsetzbar.} Das
       Lower-Limb-Modell erkennt $95$--$100\,\%$ der Stürze am Knöchel
       des eigenen Prototyps und löst beim Gehen und Joggen kaum
@@ -2852,7 +2969,8 @@ können allein aus der Achsenlage folgen.
 \end{enumerate}
 
 Offen bleibt, wie gut das Modell Stürze \emph{in der Sohle} erkennt:
-Der Pilotversuch misst am Knöchel und stammt von einer einzigen
+Das Modell auf dem Prototyp (B2r) wurde ohne Sohlendaten gewählt, der
+Pilotversuch misst an Hüfte und Knöchel und stammt von einer einzigen
 Person. Eine belastbare Antwort erfordert Aufnahmen mehrerer Personen
 mit dem Sensor in der Sohle.
 
