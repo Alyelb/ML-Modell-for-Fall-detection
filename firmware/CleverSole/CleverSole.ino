@@ -626,12 +626,6 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
       snprintf(msg, sizeof(msg), "LAGE %s %d%% (vor %d rueck %d seit %d)",
                richtung, p_richtung, p_vor, p_rueck, p_seit);
       bleInfoSenden(msg);
-      snprintf(msg, sizeof(msg), "WINKEL %.0f Grad [Sturz %.0f-%.0f, Gehen <%.0f]",
-               winkel, REF_STURZ_LAGE_MIN, REF_STURZ_LAGE_MAX, REF_GEHEN_LAGE_MAX);
-      bleInfoSenden(msg);
-      snprintf(msg, sizeof(msg), "RUHE %.2fg [Sturz %.2f-%.2f, Gehen >%.2f]",
-               ruhe, REF_STURZ_RUHE_MIN, REF_STURZ_RUHE_MAX, REF_GEHEN_RUHE_MIN);
-      bleInfoSenden(msg);
       bleInfoSenden(stufe2 ? "STUFE2 bestaetigt (Aufprall+Lage+Ruhe)"
                            : "STUFE2 nicht bestaetigt");
       lage_aktiv = false;
@@ -804,7 +798,7 @@ void setup() {
                 "Montagevorgabe (wird beim Gehen kalibriert)");
 #if TESTMODUS
   Serial.println("TESTMODUS: Ausgabe jeder Inferenz, kein Tiefschlaf");
-  Serial.println("Format: T,<ms>,<Sturz %>,<Stimmen von 5>,<amax g>,<wmax dps>");
+  Serial.println("Format: T,<ms>,<Sturz %>,<Stimmen von 5>");
 #endif
   letzteBewegung = millis();
   memset(vote_puffer, 0, sizeof(vote_puffer));
@@ -882,11 +876,9 @@ void loop() {
         (void)dauer;
         int stimmen = 0;
         for (int i = 0; i < VOTE_M; i++) stimmen += vote_puffer[i];
-        float amax, wmax;
-        fensterKennwerte(&amax, &wmax);
-        char zeile[64];
-        snprintf(zeile, sizeof(zeile), "T,%lu,%d,%d,%.2f,%.0f",
-                 (unsigned long)jetzt, (int)lroundf(p * 100.0f), stimmen, amax, wmax);
+        char zeile[48];
+        snprintf(zeile, sizeof(zeile), "T,%lu,%d,%d",
+                 (unsigned long)jetzt, (int)lroundf(p * 100.0f), stimmen);
         bleInfoSenden(zeile);
 #else
         static uint32_t zaehler = 0;
@@ -897,16 +889,8 @@ void loop() {
         }
 #endif
         if (alarm) {
-          fensterKennwerte(&alarm_amax, &alarm_wmax);
+          fensterKennwerte(&alarm_amax, &alarm_wmax);   // fuer Stufe 2
           bleAlarmSenden(p);
-          char kz[96];
-          snprintf(kz, sizeof(kz), "AMAX %.1fg [Sturz %.1f-%.1f, Gehen %.1f-%.1f]",
-                   alarm_amax, REF_STURZ_AMAX_MIN, REF_STURZ_AMAX_MAX,
-                   REF_GEHEN_AMAX_MIN, REF_GEHEN_AMAX_MAX);
-          bleInfoSenden(kz);
-          snprintf(kz, sizeof(kz), "WMAX %.0fdps [Sturz %.0f-%.0f]",
-                   alarm_wmax, REF_STURZ_WMAX_MIN, REF_STURZ_WMAX_MAX);
-          bleInfoSenden(kz);
           memset(vote_puffer, 0, sizeof(vote_puffer));
           lageStarten(jetzt);
         }
