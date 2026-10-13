@@ -76,21 +76,41 @@ python tools/export_firmware_model.py <modell>.keras Pilotdaten/
 
 ## 3a. Meldungen über Bluetooth
 
-| Characteristic | Inhalt |
-|---|---|
-| `FFF1` Alarm | `STURZ p=0.93 n=3 batt=87` – p: Modellausgabe (kein kalibrierter Wahrscheinlichkeitswert), n: Alarme seit Start |
-| `FFF2` Info | `LAGE vorwaerts (Bauchlage) x=-0.91 y=0.24 z=-0.20` – Sturzrichtung aus der Liegelage nach dem Alarm (Schätzung) |
-| `FFF2` Info (Testmodus) | `T,<ms>,<p>,<Stimmen von 5>` – jede Inferenz |
-| `180F` Batterie | Ladestand in % |
+Beispiel eines Alarms (Reihenfolge wie gesendet):
 
-Mögliche Richtungen: `vorwaerts (Bauchlage)`, `rueckwaerts (Rueckenlage)`,
-`seitlich`, `aufrecht (kein Liegen)`, `unklar`, oder
-`keine Liegephase gefunden` (15 s nach dem Alarm keine Ruhe).
+```
+FFF1  STURZ 93% n=3 batt=87
+FFF2  AMAX 3.4g [Sturz 1.8-9.6, Gehen 1.4-3.1]
+FFF2  WMAX 310dps [Sturz 52-628]
+      ... Person liegt still ...
+FFF2  LAGE vorwaerts 92% (vor 92 rueck 0 seit 20)
+FFF2  WINKEL 85 Grad [Sturz 11-108, Gehen <12]
+FFF2  RUHE 0.02g [Sturz 0.00-0.17, Gehen >0.15]
+FFF2  STUFE2 bestaetigt (Aufprall+Lage+Ruhe)
+```
+
+| Zeile | Bedeutung |
+|---|---|
+| `STURZ 93%` | Ausgabe des CNN (0–100 %). **Kein** kalibrierter Wahrscheinlichkeitswert, sondern ein Wert, ab 50 % stimmt das Fenster für „Sturz“; Alarm bei 3 von 5 Fenstern. |
+| `AMAX`, `WMAX` | Spitzen von \|a\| und \|ω\| im Alarmfenster, dahinter die Bereiche aus den Pilotdaten. |
+| `LAGE` | Richtung aus der Liegelage; die Prozentzahl ist der Anteil der Schwerkraft auf der jeweiligen Achse (Übereinstimmung, keine Wahrscheinlichkeit). |
+| `WINKEL` | Lageänderung zwischen Stehen vor dem Sturz und Liegen danach. |
+| `RUHE` | Bewegung in der Liegephase (Std. von \|a\|). |
+| `STUFE2` | Bestätigung durch einfache Kennwerte: \|a\|max > 1,5 g, Winkel > 40°, Ruhe < 0,2 g. |
+
+Die Bereiche stehen in `referenzwerte.h` (Knöchel-Pilotdaten, eine
+Person) und sind mit Sohlenaufnahmen neu zu bestimmen
+(`tools/kennwerte_pilot.py`). **Das CNN entscheidet nicht anhand dieser
+Grenzen** – es bewertet das gesamte 2-s-Signal; die Werte dienen der
+Einordnung und der zweiten Stufe.
+
+Weitere Zeilen: `LAGE keine Liegephase gefunden` (15 s ohne Ruhe),
+Batteriestand über `180F`.
 
 ## 3b. Testmodus
 
 `#define TESTMODUS 1` in `CleverSole.ino`: jede Modellausgabe wird
-alle 0,2 s über Serial und BLE (`FFF2`) gesendet, der Tiefschlaf ist
+alle 0,2 s als `T,<ms>,<Sturz %>,<Stimmen von 5>,<amax g>,<wmax dps>` über Serial und BLE (`FFF2`) gesendet, der Tiefschlaf ist
 abgeschaltet. Für Versuche: Serial Monitor oder nRF Connect mitloggen,
 Uhrzeit jeder Aktivität notieren, danach Alarme zählen
 (Sensitivität = erkannte / ausgeführte Stürze; Fehlalarme je Stunde =

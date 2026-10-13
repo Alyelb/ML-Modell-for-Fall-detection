@@ -103,6 +103,7 @@ static const float GYR_LSB = 1.0f / 16.384f;
 // Startwert ist die Montagevorgabe aus modell.h; die Kalibrierung
 // ersetzt sie nach dem Aufwachen. RTC-Speicher: bleibt im Tiefschlaf.
 #include "modell.h"
+#include "referenzwerte.h"
 static const float R_MONTAGE[3][3] = R_MONTAGE_WERTE;
 RTC_DATA_ATTR static float R_akt[3][3] = R_MONTAGE_WERTE;
 RTC_DATA_ATTR static bool  kalibriert_je = false;
@@ -382,9 +383,9 @@ static void bleInfoSenden(const char *msg) {
 static void bleAlarmSenden(float wahrscheinlichkeit) {
   alarme_gesamt++;
   char msg[64];
-  snprintf(msg, sizeof(msg), "STURZ p=%.2f n=%lu batt=%u",
-           wahrscheinlichkeit, (unsigned long)alarme_gesamt,
-           batterieProzent());
+  snprintf(msg, sizeof(msg), "STURZ %d%% n=%lu batt=%u",
+           (int)lroundf(wahrscheinlichkeit * 100.0f),
+           (unsigned long)alarme_gesamt, batterieProzent());
   Serial.println(msg);
   if (chrAlarm) {
     chrAlarm->setValue((uint8_t*)msg, strlen(msg));
@@ -554,11 +555,37 @@ static bool     lage_aktiv = false;
 static uint32_t lage_start = 0;
 static int      lage_folge = 0;
 static float    lage_summe[3];
+static float    lage_betrag_summe = 0, lage_betrag_quad = 0;
+static float    alarm_amax = 0, alarm_wmax = 0;   // Kennwerte des Alarmfensters
+static float    g_vorher[3] = {0, -1, 0};         // Schwerkraft im Stand (gedreht)
+
+// Schwerkraft vor dem Sturz laufend mitfuehren: nur im aufrechten Stillstand
+static void standMerken(const float *m) {
+  float betrag_a = sqrtf(skalar(m, m));
+  float betrag_w = sqrtf(skalar(m + 3, m + 3));
+  if (betrag_w < 10.0f && fabsf(betrag_a - 1.0f) < 0.06f && m[1] < -0.8f) {
+    for (int i = 0; i < 3; i++) g_vorher[i] = 0.98f * g_vorher[i] + 0.02f * m[i];
+  }
+}
+
+// Spitzenwerte |a| und |w| im aktuellen 2-s-Fenster (Ringpuffer)
+static void fensterKennwerte(float *amax, float *wmax) {
+  *amax = 0; *wmax = 0;
+  for (int t = 0; t < FENSTER_LEN; t++) {
+    float a = sqrtf(skalar(ring[t], ring[t]));
+    float w = sqrtf(skalar(ring[t] + 3, ring[t] + 3));
+    if (a > *amax) *amax = a;
+    if (w > *wmax) *wmax = w;
+  }
+}
 
 static void lageStarten(uint32_t jetzt) {
   lage_aktiv = true; lage_start = jetzt; lage_folge = 0;
   memset(lage_summe, 0, sizeof(lage_summe));
+  lage_betrag_summe = lage_betrag_quad = 0;
 }
+
+static int prozent(float v) { return (int)lroundf(100.0f * fminf(1.0f, fmaxf(0.0f, v))); }
 
 static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
   if (!lage_aktiv) return;
@@ -566,27 +593,57 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
   float betrag_w = sqrtf(skalar(m + 3, m + 3));
   if (betrag_w < 15.0f && fabsf(betrag_a - 1.0f) < 0.1f) {
     for (int i = 0; i < 3; i++) lage_summe[i] += m[i];
+    lage_betrag_summe += betrag_a;
+    lage_betrag_quad  += betrag_a * betrag_a;
     if (++lage_folge >= LAGE_RUHE_PROBEN) {
       float g[3];
       for (int i = 0; i < 3; i++) g[i] = lage_summe[i] / lage_folge;
+      float mittel = lage_betrag_summe / lage_folge;
+      float ruhe   = sqrtf(fmaxf(0.0f, lage_betrag_quad / lage_folge - mittel * mittel));
+
+      // Anteil der Schwerkraft auf der jeweiligen Achse = Uebereinstimmung
+      int p_vor   = prozent(fmaxf(-g[0], g[1]));     // Bauchlage
+      int p_rueck = prozent(g[0]);                    // Rueckenlage
+      int p_seit  = prozent(fabsf(g[2]));             // Seitenlage
       const char *richtung;
-      if (g[1] < -0.8f)                        richtung = "aufrecht (kein Liegen)";
-      else if (g[0] < -0.5f || g[1] > 0.5f)    richtung = "vorwaerts (Bauchlage)";
-      else if (g[0] > 0.5f)                    richtung = "rueckwaerts (Rueckenlage)";
-      else if (fabsf(g[2]) > 0.5f)             richtung = "seitlich";
-      else                                     richtung = "unklar";
+      int p_richtung;
+      if (g[1] < -0.8f)                          { richtung = "aufrecht"; p_richtung = prozent(-g[1]); }
+      else if (p_vor >= p_rueck && p_vor >= p_seit) { richtung = "vorwaerts"; p_richtung = p_vor; }
+      else if (p_rueck >= p_seit)               { richtung = "rueckwaerts"; p_richtung = p_rueck; }
+      else                                      { richtung = "seitlich"; p_richtung = p_seit; }
+      if (p_richtung < 50 && g[1] >= -0.8f) richtung = "unklar";
+
+      // Lageaenderung gegenueber dem Stand vor dem Sturz
+      float gv[3] = {g_vorher[0], g_vorher[1], g_vorher[2]};
+      float gl[3] = {g[0], g[1], g[2]};
+      float winkel = 0;
+      if (normieren(gv) && normieren(gl))
+        winkel = acosf(fminf(1.0f, fmaxf(-1.0f, skalar(gv, gl)))) * 57.2958f;
+
+      bool stufe2 = alarm_amax > STUFE2_AMAX_MIN && winkel > STUFE2_LAGE_MIN &&
+                    ruhe < STUFE2_RUHE_MAX;
       char msg[96];
-      snprintf(msg, sizeof(msg), "LAGE %s x=%.2f y=%.2f z=%.2f",
-               richtung, g[0], g[1], g[2]);
+      snprintf(msg, sizeof(msg), "LAGE %s %d%% (vor %d rueck %d seit %d)",
+               richtung, p_richtung, p_vor, p_rueck, p_seit);
       bleInfoSenden(msg);
+      snprintf(msg, sizeof(msg), "WINKEL %.0f Grad [Sturz %.0f-%.0f, Gehen <%.0f]",
+               winkel, REF_STURZ_LAGE_MIN, REF_STURZ_LAGE_MAX, REF_GEHEN_LAGE_MAX);
+      bleInfoSenden(msg);
+      snprintf(msg, sizeof(msg), "RUHE %.2fg [Sturz %.2f-%.2f, Gehen >%.2f]",
+               ruhe, REF_STURZ_RUHE_MIN, REF_STURZ_RUHE_MAX, REF_GEHEN_RUHE_MIN);
+      bleInfoSenden(msg);
+      bleInfoSenden(stufe2 ? "STUFE2 bestaetigt (Aufprall+Lage+Ruhe)"
+                           : "STUFE2 nicht bestaetigt");
       lage_aktiv = false;
     }
   } else {
     lage_folge = 0;
     memset(lage_summe, 0, sizeof(lage_summe));
+    lage_betrag_summe = lage_betrag_quad = 0;
   }
   if (lage_aktiv && jetzt - lage_start > LAGE_SUCHE_MS) {
     bleInfoSenden("LAGE keine Liegephase gefunden");
+    bleInfoSenden("STUFE2 nicht bestaetigt");
     lage_aktiv = false;
   }
 }
@@ -747,7 +804,7 @@ void setup() {
                 "Montagevorgabe (wird beim Gehen kalibriert)");
 #if TESTMODUS
   Serial.println("TESTMODUS: Ausgabe jeder Inferenz, kein Tiefschlaf");
-  Serial.println("Format: T,<ms>,<p>,<Stimmen von 5>");
+  Serial.println("Format: T,<ms>,<Sturz %>,<Stimmen von 5>,<amax g>,<wmax dps>");
 #endif
   letzteBewegung = millis();
   memset(vote_puffer, 0, sizeof(vote_puffer));
@@ -781,6 +838,7 @@ void loop() {
     }
     drehen(R_akt, roh, messung);           // Beschleunigung
     drehen(R_akt, roh + 3, messung + 3);   // Winkelgeschwindigkeit
+    standMerken(messung);
     lagePruefen(messung, jetzt);
 
     if (zustand == AUFWAKEN && kalib_fertig && schritte >= SCHRITTE_START) {
@@ -824,9 +882,11 @@ void loop() {
         (void)dauer;
         int stimmen = 0;
         for (int i = 0; i < VOTE_M; i++) stimmen += vote_puffer[i];
-        char zeile[48];
-        snprintf(zeile, sizeof(zeile), "T,%lu,%.3f,%d",
-                 (unsigned long)jetzt, p, stimmen);
+        float amax, wmax;
+        fensterKennwerte(&amax, &wmax);
+        char zeile[64];
+        snprintf(zeile, sizeof(zeile), "T,%lu,%d,%d,%.2f,%.0f",
+                 (unsigned long)jetzt, (int)lroundf(p * 100.0f), stimmen, amax, wmax);
         bleInfoSenden(zeile);
 #else
         static uint32_t zaehler = 0;
@@ -837,7 +897,16 @@ void loop() {
         }
 #endif
         if (alarm) {
+          fensterKennwerte(&alarm_amax, &alarm_wmax);
           bleAlarmSenden(p);
+          char kz[96];
+          snprintf(kz, sizeof(kz), "AMAX %.1fg [Sturz %.1f-%.1f, Gehen %.1f-%.1f]",
+                   alarm_amax, REF_STURZ_AMAX_MIN, REF_STURZ_AMAX_MAX,
+                   REF_GEHEN_AMAX_MIN, REF_GEHEN_AMAX_MAX);
+          bleInfoSenden(kz);
+          snprintf(kz, sizeof(kz), "WMAX %.0fdps [Sturz %.0f-%.0f]",
+                   alarm_wmax, REF_STURZ_WMAX_MIN, REF_STURZ_WMAX_MAX);
+          bleInfoSenden(kz);
           memset(vote_puffer, 0, sizeof(vote_puffer));
           lageStarten(jetzt);
         }
