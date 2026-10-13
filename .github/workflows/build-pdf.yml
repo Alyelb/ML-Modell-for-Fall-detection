@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'report/**'
+      - 'bericht/**'
       - '.github/workflows/build-pdf.yml'
 
 permissions:
@@ -15,17 +16,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile LaTeX
+      - name: Compile report (Langfassung)
         uses: xu-cheng/latex-action@v3
         with:
           root_file: report/main.tex
           latexmk_use_xelatex: false
           args: -pdf -interaction=nonstopmode -output-directory=report
 
-      - name: Commit PDF back to repo
+      - name: Compile Bericht (Kurzfassung)
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: main.tex
+          working_directory: bericht
+          latexmk_use_xelatex: false
+          args: -pdf -interaction=nonstopmode
+
+      - name: Commit PDFs back to repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f report/main.pdf
-          git diff --staged --quiet || git commit -m "auto: rebuild report PDF"
+          git add -f report/main.pdf bericht/main.pdf
+          git diff --staged --quiet || git commit -m "auto: rebuild report PDFs"
           git push

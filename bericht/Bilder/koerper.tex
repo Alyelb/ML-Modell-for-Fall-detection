@@ -1,0 +1,74 @@
+% Sensorpositionen der verwendeten Datensaetze (wird per \input eingebunden)
+\begin{tikzpicture}[x=1cm,y=1cm,
+  koerper/.style={fill=black!12,draw=black!35,line width=0.4pt},
+  glied/.style={line width=11pt,line cap=round,draw=black!12},
+  sturz/.style={circle,fill=thmrot,draw=white,line width=0.6pt,inner sep=2.2pt},
+  adl/.style={rectangle,fill=thmblau,draw=white,line width=0.6pt,inner sep=2.2pt},
+  pilot/.style={star,star points=5,fill=black!80,draw=white,line width=0.4pt,inner sep=1.5pt},
+  ziel/.style={circle,draw=thmgruen,line width=1.6pt,inner sep=4pt},
+  lab/.style={font=\scriptsize,align=left,inner sep=1pt},
+  labr/.style={font=\scriptsize,align=right,inner sep=1pt},
+  zeiger/.style={draw=black!45,line width=0.35pt}]
+
+% --- Silhouette ---------------------------------------------------
+\draw[glied] (-0.95,6.15) -- (-1.35,4.85) -- (-1.55,3.65);   % Arm rechts (Bildlinks)
+\draw[glied] ( 0.95,6.15) -- ( 1.35,4.85) -- ( 1.55,3.65);   % Arm links
+\draw[glied] (-0.42,3.9) -- (-0.47,2.0) -- (-0.5,0.55);       % Bein rechts
+\draw[glied] ( 0.42,3.9) -- ( 0.47,2.0) -- ( 0.5,0.55);       % Bein links
+\fill[black!12] (-0.62,0.22) ellipse (0.36 and 0.17);
+\fill[black!12] ( 0.62,0.22) ellipse (0.36 and 0.17);
+\draw[koerper,draw=none] (-1.05,6.35) .. controls (-1.1,5.2) and (-0.8,4.6) .. (-0.82,3.7)
+  -- (0.82,3.7) .. controls (0.8,4.6) and (1.1,5.2) .. (1.05,6.35)
+  .. controls (0.5,6.6) and (-0.5,6.6) .. cycle;               % Rumpf
+\fill[black!12] (-0.16,6.45) rectangle (0.16,6.85);            % Hals
+\fill[black!12] (0,7.25) circle (0.42);                        % Kopf
+
+% --- Positionen ---------------------------------------------------
+% Kopf
+\node[sturz] (kopf) at (0.18,7.45) {};
+\draw[zeiger] (kopf) -- (2.4,7.45) node[lab,right] {Kopf: CAPPIMU};
+% Nacken
+\node[sturz] (nacken) at (0,6.7) {};
+\draw[zeiger] (nacken) -- (-2.4,7.0) node[labr,left] {Nacken: FallAllD};
+% Brust
+\node[sturz] (brust) at (0.3,5.75) {};
+\draw[zeiger] (brust) -- (2.4,6.5) node[lab,right] {Brust: CAPPIMU, UMAFall};
+% Oberarme
+\node[sturz] (oar) at (-1.3,5.05) {};
+\node[sturz] (oal) at ( 1.3,5.05) {};
+\draw[zeiger] (oal) -- (2.4,5.6) node[lab,right] {Oberarm l./r.: CAPPIMU};
+% Handgelenke
+\node[sturz] (hgr) at (-1.53,3.85) {};
+\node[sturz] (hgl) at ( 1.53,3.85) {};
+\draw[zeiger] (hgl) -- (2.4,4.35) node[lab,right] {Handgelenk: CAPPIMU, UMAFall,\\FallAllD, WEDA-FALL};
+% Huefte / Taille
+\node[sturz] (huefte) at (0,4.05) {};
+\node[pilot] (hpilot) at (0.32,4.05) {};
+\draw[zeiger] (huefte) -- (-2.4,4.95) node[labr,left] {Hüfte/Taille: \textbf{SisFall},\\UMAFall, FallAllD,\\eigener Prototyp};
+\draw[zeiger] (-0.3,4.3) -- (-2.4,6.25) node[labr,left] {unterer Rücken: KFall};
+\node[sturz] (ruecken) at (-0.3,4.3) {};
+% Hosentasche
+\node[sturz] (tasche) at (-0.62,3.35) {};
+\draw[zeiger] (tasche) -- (-2.4,3.4) node[labr,left] {Hosentasche: CAPPIMU,\\UMAFall};
+% Schienbein
+\node[sturz] (sbr) at (-0.47,1.75) {};
+\node[sturz] (sbl) at ( 0.47,1.75) {};
+\draw[zeiger] (sbl) -- (2.4,2.6) node[lab,right] {oberes Schienbein l./r.:\\CAPPIMU};
+% Knoechel
+\node[sturz] (knr) at (-0.5,0.62) {};
+\node[pilot] (knpr) at (-0.82,0.75) {};
+\node[pilot] (knpl) at ( 0.82,0.75) {};
+\draw[zeiger] (knr) -- (-2.4,1.25) node[labr,left] {Knöchel: UMAFall,\\eigener Prototyp (l./r.)};
+% Sohle
+\node[adl] (sohle) at (0.62,0.22) {};
+\node[ziel] at (0.62,0.22) {};
+\draw[zeiger] (sohle) -- (2.4,0.3) node[lab,right] {Sohle: ImbalanSense,\\Smart-Insole; \textbf{Zielposition}};
+
+% --- Legende ------------------------------------------------------
+\begin{scope}[shift={(-4.9,-0.75)}]
+  \node[sturz] at (0,0) {}; \node[lab,right] at (0.15,0) {mit Stürzen};
+  \node[adl] at (2.2,0) {};  \node[lab,right] at (2.35,0) {nur Alltag};
+  \node[pilot] at (4.2,0) {}; \node[lab,right] at (4.35,0) {Pilotaufnahmen};
+  \node[ziel] at (6.85,0) {}; \node[lab,right] at (7.1,0) {Zielposition};
+\end{scope}
+\end{tikzpicture}

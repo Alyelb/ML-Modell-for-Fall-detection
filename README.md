@@ -40,6 +40,8 @@ hardware.
 │   ├── DatenLogger/         100 Hz recorder to internal flash
 │   └── sketch_aug21a/       First I2C test sketch
 │
+├── bericht/                 Short report (max. 20 pages, German): main.tex, main.pdf
+│                            Photos/logo go into bericht/Bilder/
 ├── report/                  LaTeX report, auto-compiled on every push
 │   ├── main.tex
 │   ├── main.pdf             ← viewable inline on GitHub

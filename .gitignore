@@ -44,3 +44,13 @@ report/*.synctex.gz
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# --- LaTeX-Hilfsdateien ---
+bericht/*.aux
+bericht/*.log
+bericht/*.out
+bericht/*.toc
+bericht/*.bbl
+bericht/*.blg
+bericht/*.lof
+bericht/*.lot
