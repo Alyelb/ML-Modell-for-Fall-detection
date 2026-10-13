@@ -1,24 +1,25 @@
-# CleverSole — Firmware für ESP32-C6 + MPU-6050
+# CleverSole — Firmware für XIAO ESP32-C6 + MPU-6050/6500 (Einlegesohle)
 
 ## 1. Verkabelung
 
 ```
-ESP32-C6            MPU-6050
---------            --------
-3.3V          →     VCC
+XIAO ESP32-C6       IMU-Modul (MPU-6050/6500)
+-------------       -------------------------
+3V3           →     VCC
 GND           →     GND
-GPIO6 (SDA)   →     SDA
-GPIO7 (SCL)   →     SCL
-GPIO4         ←     INT        ← wichtig für das Aufwachen
+D4 (GPIO22)   →     SDA
+D5 (GPIO23)   →     SCL
+D1 (GPIO1)    ←     INT        ← wichtig für das Aufwachen
                     AD0  → GND (Adresse 0x68)
 
-Batterie (LiPo)
----------------
-BAT+ ─┬─ 100 kΩ ─┬─ 100 kΩ ─ GND
-      │          │
-      │        GPIO1 (ADC)
-      └─ zum Regler
+Batterie (LiPo): Spannungsteiler 2 × 100 kΩ an PIN_BATT_ADC
 ```
+
+Die Pins stehen oben in `CleverSole.ino` (`PIN_SDA`, `PIN_SCL`,
+`PIN_MPU_INT`, `PIN_BATT_ADC`) und müssen zur tatsächlichen Verdrahtung
+passen. Hinweis: Auf dem XIAO ESP32-C6 ist GPIO3 intern für die
+Antennenumschaltung belegt; liegt der Spannungsteiler an einem anderen
+ADC-Pin (z. B. D0/GPIO0 oder D2/GPIO2), `PIN_BATT_ADC` anpassen.
 
 **Der INT-Pin muss auf GPIO0–GPIO7 liegen.** Nur diese sind beim
 ESP32-C6 LP-GPIOs und können aus dem Tiefschlaf wecken. Liegt der Pin
@@ -41,25 +42,59 @@ Einstellungen:
 - **Partition Scheme:** `Huge APP (3MB No OTA)` — das Modell braucht Platz
 - **Flash Size:** 4 MB
 
-## 3. Modell einbinden
+## 3. Einbau in die Sohle und Modell
 
-In `modell.h` wird mit `EINBAU_SOHLE` gewählt:
+Die Firmware ist **nur für die Einlegesohle** gedacht.
 
-| `EINBAU_SOHLE` | Einbau | Modell |
-|---|---|---|
-| `1` (Standard) | flach in der Sohle, Bauteilseite oben, USB-C zur Außenseite/Ferse | B2r: Lower-Limb mit Orientierungs-Augmentierung, ohne Sohlendaten (`modell_sohle.h`) |
-| `0` | seitlich am Knöchel, USB-C oben | Lower-Limb (`modell_knoechel.h`) |
+**Einbau:** Das blaue IMU-Modul liegt flach unter der Ferse, die
+Bauteilseite (Chip) zeigt nach oben, der auf das Modul gedruckte
+**X-Pfeil zeigt zu den Zehen**. XIAO und Akku können beliebig daneben
+liegen – maßgeblich ist nur das IMU-Modul, nicht die USB-Buchse.
 
-Die passende Achsdrehung (`R_EINBAU`) wird mit ausgewählt. Wird das
-Board anders eingebaut, stimmt sie nicht mehr -- dann sinkt die
-Erkennung deutlich (Bericht, Abschnitt Sensororientierung).
+**Kalibrierung (automatisch):** Nach jedem Aufwachen bestimmt die
+Firmware die tatsächliche Lage des Moduls selbst:
 
-Modelldateien neu erzeugen:
+1. Kurz stillstehen (≥ 1 s) → Richtung der Schwerkraft = „oben“.
+2. Losgehen (ca. 10–15 Schritte) → Hauptdrehachse des Fußes = Querachse,
+   die Richtung der Schwungphase legt „vorwärts“ fest.
+3. Daraus folgt die Drehung in den Trainingsrahmen des Modells
+   (x' vorwärts, y' abwärts, z' links). Ausgabe z. B.:
+   `Kalibrierung ok: ... Querachse 92 %, Abweichung zur Vorgabe 12 Grad`
+4. Erst danach startet die Erkennung (`Inferenz aktiv`).
+
+Liegt das Modul schief oder verdreht, gleicht die Kalibrierung das aus.
+Schlägt sie fehl (zu wenig Gehen), gilt die Montagevorgabe aus
+`modell.h`. Mit `KALIB_RICHTUNG_AUTO 0` wird „vorwärts“ nicht aus dem
+Gang, sondern aus dem X-Pfeil übernommen.
+
+**Modell:** `modell_sohle.h` (B2r, int8, ca. 80 KB). Neu erzeugen:
 
 ```bash
 pip install tensorflow
-python tools/export_firmware_model.py <modell>.keras Pilotdaten/ modell_sohle.h
+python tools/export_firmware_model.py <modell>.keras Pilotdaten/
 ```
+
+## 3a. Meldungen über Bluetooth
+
+| Characteristic | Inhalt |
+|---|---|
+| `FFF1` Alarm | `STURZ p=0.93 n=3 batt=87` – p: Modellausgabe (kein kalibrierter Wahrscheinlichkeitswert), n: Alarme seit Start |
+| `FFF2` Info | `LAGE vorwaerts (Bauchlage) x=-0.91 y=0.24 z=-0.20` – Sturzrichtung aus der Liegelage nach dem Alarm (Schätzung) |
+| `FFF2` Info (Testmodus) | `T,<ms>,<p>,<Stimmen von 5>` – jede Inferenz |
+| `180F` Batterie | Ladestand in % |
+
+Mögliche Richtungen: `vorwaerts (Bauchlage)`, `rueckwaerts (Rueckenlage)`,
+`seitlich`, `aufrecht (kein Liegen)`, `unklar`, oder
+`keine Liegephase gefunden` (15 s nach dem Alarm keine Ruhe).
+
+## 3b. Testmodus
+
+`#define TESTMODUS 1` in `CleverSole.ino`: jede Modellausgabe wird
+alle 0,2 s über Serial und BLE (`FFF2`) gesendet, der Tiefschlaf ist
+abgeschaltet. Für Versuche: Serial Monitor oder nRF Connect mitloggen,
+Uhrzeit jeder Aktivität notieren, danach Alarme zählen
+(Sensitivität = erkannte / ausgeführte Stürze; Fehlalarme je Stunde =
+Alarme im Alltag / Stunden). Im Einsatz `TESTMODUS 0`.
 
 ## 4. In Stufen testen
 

@@ -5,14 +5,14 @@ Erzeugt aus einem trainierten Modell die Datei
 firmware/CleverSole/modell.h, die die Firmware direkt einbindet.
 
 Aufruf (im Repo-Ordner):
-    python tools/export_firmware_model.py fall_model_lowerlimb.keras Pilotdaten/
+    python tools/export_firmware_model.py fall_model_lowerlimb_aug.keras Pilotdaten/
 
     Argument 1: Keras-Modell (.keras)
     Argument 2: Ordner mit Pilotaufnahmen (DatenLogger-CSV). Dient als
                 repraesentativer Datensatz fuer die int8-Kalibrierung
                 und zur Kontrolle, dass int8 und float uebereinstimmen.
     Argument 3: (optional) Name der Zieldatei in firmware/CleverSole/,
-                z. B. modell_sohle.h. Standard: modell_knoechel.h
+                Standard: modell_sohle.h
 
 Ausgabe:
     firmware/CleverSole/<Argument 3>   C-Array, 16-Byte-ausgerichtet
@@ -96,7 +96,7 @@ def main():
     # --- modell.h schreiben ---------------------------------------------
     hexz = [", ".join(f"0x{b:02x}" for b in blob[i:i + 12])
             for i in range(0, len(blob), 12)]
-    name = sys.argv[3] if len(sys.argv) > 3 else "modell_knoechel.h"
+    name = sys.argv[3] if len(sys.argv) > 3 else "modell_sohle.h"
     ziel = Path(__file__).resolve().parents[1] / "firmware" / "CleverSole" / name
     waechter = name.upper().replace(".", "_")
     ziel.write_text(

@@ -243,16 +243,16 @@ text(s, 0.47, 4.75, 12.3, 2.0, [
     [("Pilotdaten (1 Person): ", {"bold": True}), ("Hüfte, Knöchel l./r. · 67 Stürze auf Matte · Gehen, Joggen, Treppen, Sitzen, Springen, Aufheben", {})],
 ], size=15, bullets=True, space=6)
 notiz(s, "Eigene Logger-Firmware, damit Daten der Zielhardware entstehen. Knöchel: USB-C oben. "
-         "Sohle: flach, Bauteilseite oben, USB-C zur Außenseite. Sohlenaufnahmen waren unvollständig und werden nicht ausgewertet.")
+         "Sohle: IMU-Modul flach, Chip oben, X-Pfeil zu den Zehen; die Firmware kalibriert die genaue Lage selbst. Sohlenaufnahmen waren unvollständig und werden nicht ausgewertet.")
 
 # 6 Pipeline
 s = folie("Verarbeitungskette auf dem Chip")
-schritte = [("IMU", "100 Hz\n±16 g"), ("Filtern", "→ 50 Hz"), ("Fenster", "2 s\n100 × 6"), ("Einbaulage", "feste\nDrehung"),
+schritte = [("IMU", "100 Hz\n±16 g"), ("Filtern", "→ 50 Hz"), ("Fenster", "2 s\n100 × 6"), ("Kalibrierung", "Lage selbst\nbestimmen"),
             ("Z-Norm", "je Kanal"), ("1D-CNN", "61 601 Param.\nint8, 80 KB"), ("3 von 5", "alle 0,2 s"), ("Alarm", "BLE")]
 bw, gap, y0 = 1.32, 0.235, 2.3
 for i, (k, u) in enumerate(schritte):
     x = 0.47 + i * (bw + gap)
-    hi = k in ("1D-CNN", "Einbaulage")
+    hi = k in ("1D-CNN", "Kalibrierung")
     sh = kasten(s, x, y0, bw, 1.55, fill=GRUEN if hi else HELL)
     text(s, x, y0 + 0.12, bw, 0.45, [[(k, {"bold": True, "size": 15, "color": WEISS if hi else DUNKEL})]], align=PP_ALIGN.CENTER)
     text(s, x, y0 + 0.62, bw, 0.85, u.split("\n"), size=12, color=WEISS if hi else GRAU, align=PP_ALIGN.CENTER, space=0)
@@ -268,9 +268,11 @@ text(s, 6.8, 4.3, 5.95, 2.4, [
     [("Firmware (Arduino, TFLite Micro)", {"bold": True, "color": GRUEN, "size": 17})],
     "Inferenz alle 200 ms, Rechenlast ≈ 5 %",
     "int8 = float in 96 % der Pilotfenster",
-    "Einbaulage Sohle: x' = x, y' = −z, z' = y"], size=15, space=6)
-notiz(s, "Die gesamte Kette läuft auf dem ESP32-C6. Neu gegenüber dem Standard: die feste Drehung der Einbaulage "
-         "vor der Inferenz, da das CNN die Achsen einzeln auswertet.")
+    "Einbaulage: Schwerkraft + Gang → Achsen selbst kalibriert",
+    "Nach Alarm: Liegelage → Sturzrichtung (Schätzung)"], size=15, space=6)
+notiz(s, "Die gesamte Kette läuft auf dem ESP32-C6. Neu: Die Firmware bestimmt die Einbaulage nach jedem Aufwachen selbst "
+         "(Schwerkraft im Stand = oben, Hauptdrehachse beim Gehen = quer, Schwungphase = vorn) und dreht die Daten in den "
+         "Trainingsrahmen, da das CNN die Achsen einzeln auswertet. Nach einem Alarm meldet sie die Liegelage als Sturzrichtung.")
 
 # 7 Methodik
 s = folie("Bewertung: fair und statistisch abgesichert")

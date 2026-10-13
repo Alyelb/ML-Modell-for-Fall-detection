@@ -1,15 +1,17 @@
 /*
- * CleverSole  --  Sturzerkennung in der Schuhsohle
- * ESP32-C6 + MPU-6050
+ * CleverSole  --  Sturzerkennung in der Einlegesohle
+ * XIAO ESP32-C6 + MPU-6050/6500 (nur Sohle)
  *
  * Ablauf:
- *   TIEFSCHLAF  -- Aufwachen durch Bewegungsinterrupt des MPU-6050
- *   AUFWAKEN    -- Schrittzaehler laeuft, noch keine Inferenz
- *   AKTIV       -- nach 10 Schritten: Fenster fuellen, Modell auswerten
+ *   TIEFSCHLAF  -- Aufwachen durch Bewegungsinterrupt der IMU
+ *   AUFWAKEN    -- Schrittzaehler und Kalibrierung der Einbaulage
+ *   AKTIV       -- nach der Kalibrierung: Fenster fuellen, Modell auswerten
+ *   NACH ALARM  -- Liegelage pruefen und Sturzrichtung melden
  *   -> zurueck in den Tiefschlaf nach 2 Minuten ohne Bewegung
  *
  * Signalkette (muss der Trainingspipeline entsprechen):
  *   MPU 100 Hz, DLPF 44 Hz
+ *     -> Drehung Sensor -> Trainingsrahmen (Kalibrierung)
  *     -> Mittelung ueber zwei Abtastwerte (Anti-Aliasing)
  *     -> 50 Hz, Fenster 100 x 6
  *     -> Z-Normalisierung je Kanal
@@ -36,6 +38,23 @@
 
 #define GERAETENAME    "CleverSole-01"
 
+// Testmodus: 1 = jede Modellausgabe p ueber Serial und BLE (FFF2)
+// ausgeben und keinen Tiefschlaf -- fuer Versuche. Im Einsatz 0.
+#define TESTMODUS           0
+
+// Kalibrierung der Einbaulage (siehe Abschnitt KALIBRIERUNG)
+#define KALIB_AUTO          1       // 0 = nur Montagevorgabe aus modell.h
+#define KALIB_RICHTUNG_AUTO 1       // Vorwaertsrichtung aus dem Gang;
+                                    // 0 = aus der Montagevorgabe (X zu den Zehen)
+#define KALIB_GYRO_MIN_DPS  40.0f   // nur deutliche Drehungen beim Gehen
+#define KALIB_PROBEN        300     // Gyro-Proben mit deutlicher Drehung (~10-15 Schritte)
+#define KALIB_MAX_SCHRITTE  60      // spaetestens dann mit dem Vorhandenen rechnen
+#define KALIB_RUHE_PROBEN   100     // 1 s Stillstand fuer die Schwerkraft
+
+// Sturzrichtung nach einem Alarm
+#define LAGE_SUCHE_MS       15000   // so lange nach der Liegephase suchen
+#define LAGE_RUHE_PROBEN    100     // 1 s Ruhe = Liegen
+
 // Ablauflogik
 #define SCHRITTE_START      10      // Inferenz erst nach so vielen Schritten
 #define RUHE_BIS_SCHLAF_MS  120000  // 2 Minuten ohne Bewegung
@@ -47,8 +66,7 @@
 #define RUHE_SCHWELLE_G     0.08f   // Abweichung von 1 g gilt als Ruhe
 
 // Voting: 3 von 5 bei 0,2 s Schrittweite, Schwelle 0,5
-// (Pilotdaten Knoechel, Lower-Limb-Modell: 95-100 % der Stuerze
-//  erkannt, Fehlalarm-Ereignisse gegenueber 1-von-1 etwa halbiert)
+// (vorlaeufig; an Sohlendaten zu bestaetigen)
 #define VOTE_N              3
 #define VOTE_M              5
 #define VOTE_SCHWELLE       0.5f
@@ -80,16 +98,19 @@ static uint8_t chip_id = 0;
 static const float ACC_LSB = 1.0f / 2048.0f;
 static const float GYR_LSB = 1.0f / 16.384f;
 
-// Einbaulage: dreht die Sensorachsen in den Koordinatenrahmen, in dem
-// das Modell trainiert wurde (Knoechel: Schwerkraft auf -Y, USB oben).
-// Auswahl in modell.h (EINBAU_SOHLE).
+// Einbaulage: R_akt dreht die Sensorachsen in den Rahmen, in dem das
+// Modell trainiert wurde (x' vorwaerts, y' abwaerts, z' links).
+// Startwert ist die Montagevorgabe aus modell.h; die Kalibrierung
+// ersetzt sie nach dem Aufwachen. RTC-Speicher: bleibt im Tiefschlaf.
 #include "modell.h"
-static const float R_EINBAU[3][3] = R_EINBAU_WERTE;
+static const float R_MONTAGE[3][3] = R_MONTAGE_WERTE;
+RTC_DATA_ATTR static float R_akt[3][3] = R_MONTAGE_WERTE;
+RTC_DATA_ATTR static bool  kalibriert_je = false;
 
-static void einbaulageAnwenden(float *v) {        // v[0..2]
+static void drehen(const float R[3][3], const float *v, float *out) {
   float x = v[0], y = v[1], z = v[2];
   for (int i = 0; i < 3; i++)
-    v[i] = R_EINBAU[i][0] * x + R_EINBAU[i][1] * y + R_EINBAU[i][2] * z;
+    out[i] = R[i][0] * x + R[i][1] * y + R[i][2] * z;
 }
 
 // ---------------------------------------------------------------
@@ -110,6 +131,7 @@ static int   dezim_zaehler = 0;
 //  ZUSTAND
 // ---------------------------------------------------------------
 enum Zustand { AUFWAKEN, AKTIV };
+static bool kalib_fertig = false;      // in diesem Wachzyklus kalibriert
 RTC_DATA_ATTR static uint32_t alarme_gesamt = 0;
 RTC_DATA_ATTR static uint32_t schlafzyklen  = 0;
 
@@ -129,9 +151,11 @@ static int      seit_inferenz = 0;
 #define UUID_BATT_LVL  "00002A19-0000-1000-8000-00805F9B34FB"
 #define UUID_FALL_SVC  "0000FFF0-0000-1000-8000-00805F9B34FB"
 #define UUID_FALL_CHR  "0000FFF1-0000-1000-8000-00805F9B34FB"
+#define UUID_INFO_CHR  "0000FFF2-0000-1000-8000-00805F9B34FB"   // Lage, Test
 
 static BLECharacteristic *chrBatterie = nullptr;
 static BLECharacteristic *chrAlarm    = nullptr;
+static BLECharacteristic *chrInfo     = nullptr;
 static bool verbunden = false;
 
 class ServerCB : public BLEServerCallbacks {
@@ -170,15 +194,14 @@ static bool mpuLeseMessung(float *out) {
   for (int i = 0; i < 7; i++) {
     roh[i] = (int16_t)((Wire.read() << 8) | Wire.read());
   }
-  // roh[3] ist die Temperatur und wird uebersprungen
+  // roh[3] ist die Temperatur und wird uebersprungen.
+  // Ausgabe in Sensorachsen; gedreht wird erst in loop().
   out[0] = roh[0] * ACC_LSB;
   out[1] = roh[1] * ACC_LSB;
   out[2] = roh[2] * ACC_LSB;
   out[3] = roh[4] * GYR_LSB;
   out[4] = roh[5] * GYR_LSB;
   out[5] = roh[6] * GYR_LSB;
-  einbaulageAnwenden(out);          // Beschleunigung
-  einbaulageAnwenden(out + 3);      // Winkelgeschwindigkeit
   return true;
 }
 
@@ -315,6 +338,10 @@ static void bleInit() {
       UUID_FALL_CHR,
       BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   chrAlarm->addDescriptor(new BLE2902());
+  chrInfo = svcFall->createCharacteristic(
+      UUID_INFO_CHR,
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  chrInfo->addDescriptor(new BLE2902());
   svcFall->start();
 
   BLEAdvertising *adv = BLEDevice::getAdvertising();
@@ -344,6 +371,14 @@ static void bleInit() {
                 GERAETENAME, stand);
 }
 
+static void bleInfoSenden(const char *msg) {
+  Serial.println(msg);
+  if (chrInfo) {
+    chrInfo->setValue((uint8_t*)msg, strlen(msg));
+    if (verbunden) chrInfo->notify();
+  }
+}
+
 static void bleAlarmSenden(float wahrscheinlichkeit) {
   alarme_gesamt++;
   char msg[64];
@@ -365,15 +400,194 @@ static void schrittPruefen(float betrag, uint32_t jetzt) {
     if (jetzt - letzterSchritt > SCHRITT_MIN_MS) {
       schritte++;
       letzterSchritt = jetzt;
-      if (zustand == AUFWAKEN && schritte >= SCHRITTE_START) {
-        zustand = AKTIV;
-        Serial.printf("%lu Schritte erkannt -> Inferenz aktiv\n",
-                      (unsigned long)schritte);
-      }
+      // Der Wechsel nach AKTIV erfolgt in loop(), sobald zusaetzlich
+      // die Kalibrierung abgeschlossen ist.
     }
     ueberSchwelle = true;
   } else if (betrag < SCHRITT_SCHWELLE_G - 0.1f) {
     ueberSchwelle = false;            // Hysterese
+  }
+}
+
+// ---------------------------------------------------------------
+//  KALIBRIERUNG DER EINBAULAGE
+// ---------------------------------------------------------------
+// Ziel: R_akt so bestimmen, dass die Sensorachsen in den
+// Trainingsrahmen (x' vorwaerts, y' abwaerts, z' links) fallen --
+// unabhaengig davon, wie genau das Modul in der Sohle liegt.
+//   1. Hochachse u: Schwerkraft im Stillstand (sonst Mittel beim Gehen).
+//   2. Querachse r: Hauptdrehachse der Winkelgeschwindigkeit beim Gehen
+//      (der Fuss dreht beim Abrollen und in der Schwungphase um die
+//      Querachse), senkrecht zu u.
+//   3. Vorzeichen: In der Schwungphase dreht das Bein vorwaerts; diese
+//      Spitzen sind die groessten. Schiefe der Drehrate um r > 0
+//      legt fest, dass r nach rechts zeigt. Vorwaerts f = u x r.
+//      Auf den Knoechel-Pilotdaten (Gehen, Joggen) traf das in allen
+//      Faellen zu; an der Sohle ist es noch zu pruefen.
+// Faellt etwas davon aus, bleibt die Montagevorgabe aus modell.h.
+static float kal_g_ruhe[3], kal_g_gang[3];
+static int   kal_gang_n = 0, kal_ruhe_folge = 0;
+static float kal_ruhe_summe[3];
+static float kal_gyro[KALIB_PROBEN][3];
+static int   kal_gyro_n = 0;
+static bool  kal_g_ruhe_ok = false;
+
+static float skalar(const float *a, const float *b) {
+  return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+}
+static void kreuz(const float *a, const float *b, float *c) {
+  c[0] = a[1]*b[2] - a[2]*b[1];
+  c[1] = a[2]*b[0] - a[0]*b[2];
+  c[2] = a[0]*b[1] - a[1]*b[0];
+}
+static bool normieren(float *v) {
+  float n = sqrtf(skalar(v, v));
+  if (n < 1e-6f) return false;
+  v[0] /= n; v[1] /= n; v[2] /= n;
+  return true;
+}
+
+static void kalibProbe(const float *roh) {          // roh: Sensorachsen
+  const float *a = roh, *w = roh + 3;
+  float betrag_a = sqrtf(skalar(a, a));
+  float betrag_w = sqrtf(skalar(w, w));
+
+  // Stillstand: 1 s ohne Drehung bei ~1 g
+  if (betrag_w < 10.0f && fabsf(betrag_a - 1.0f) < 0.06f) {
+    for (int i = 0; i < 3; i++) kal_ruhe_summe[i] += a[i];
+    if (++kal_ruhe_folge >= KALIB_RUHE_PROBEN) {
+      for (int i = 0; i < 3; i++) kal_g_ruhe[i] = kal_ruhe_summe[i] / kal_ruhe_folge;
+      kal_g_ruhe_ok = true;
+      kal_ruhe_folge = 0;
+      memset(kal_ruhe_summe, 0, sizeof(kal_ruhe_summe));
+    }
+  } else {
+    kal_ruhe_folge = 0;
+    memset(kal_ruhe_summe, 0, sizeof(kal_ruhe_summe));
+  }
+  // Gehen: Mittel der Beschleunigung ~ Schwerkraft; Gyro sammeln
+  if (betrag_w > KALIB_GYRO_MIN_DPS && kal_gyro_n < KALIB_PROBEN) {
+    for (int i = 0; i < 3; i++) {
+      kal_gyro[kal_gyro_n][i] = w[i];
+      kal_g_gang[i] += a[i];
+    }
+    kal_gyro_n++; kal_gang_n++;
+  }
+}
+
+static bool kalibBerechnen() {
+  if (kal_gyro_n < KALIB_PROBEN / 2) return false;
+  float u[3];
+  for (int i = 0; i < 3; i++)
+    u[i] = kal_g_ruhe_ok ? kal_g_ruhe[i] : kal_g_gang[i] / kal_gang_n;
+  if (!normieren(u)) return false;
+
+  // Kovarianz der Drehrate, auf die Ebene senkrecht zu u projiziert
+  float C[3][3] = {{0}};
+  for (int k = 0; k < kal_gyro_n; k++) {
+    float w[3], d = skalar(kal_gyro[k], u);
+    for (int i = 0; i < 3; i++) w[i] = kal_gyro[k][i] - d * u[i];
+    for (int i = 0; i < 3; i++)
+      for (int j = 0; j < 3; j++) C[i][j] += w[i] * w[j];
+  }
+  // Hauptachse per Potenzmethode; Startvektor = Querachse der Montagevorgabe
+  float r[3] = {R_MONTAGE[2][0], R_MONTAGE[2][1], R_MONTAGE[2][2]};
+  float d0 = skalar(r, u);
+  for (int i = 0; i < 3; i++) r[i] -= d0 * u[i];
+  if (!normieren(r)) { r[0] = 1; r[1] = 0; r[2] = 0; }
+  float lambda = 0;
+  for (int it = 0; it < 50; it++) {
+    float q[3];
+    for (int i = 0; i < 3; i++) q[i] = C[i][0]*r[0] + C[i][1]*r[1] + C[i][2]*r[2];
+    lambda = sqrtf(skalar(q, q));
+    if (!normieren(q)) return false;
+    memcpy(r, q, sizeof(r));
+  }
+  // Guete: Anteil der Drehung um die Querachse (Gehen ~ 0,7 und mehr)
+  float spur = C[0][0] + C[1][1] + C[2][2];
+  float anteil = (spur > 0) ? lambda / spur : 0;
+  if (anteil < 0.5f) {
+    Serial.printf("Kalibrierung: keine klare Querachse (%.2f) -- Vorgabe bleibt\n", anteil);
+    return false;
+  }
+
+  // Vorzeichen der Querachse
+  float f[3];
+#if KALIB_RICHTUNG_AUTO
+  double schiefe = 0;
+  for (int k = 0; k < kal_gyro_n; k++) {
+    double s = skalar(kal_gyro[k], r);
+    schiefe += s * s * s;
+  }
+  if (schiefe < 0) { r[0] = -r[0]; r[1] = -r[1]; r[2] = -r[2]; }
+  kreuz(u, r, f);                                    // vorwaerts = oben x rechts
+#else
+  kreuz(u, r, f);
+  const float *x_vorgabe = R_MONTAGE[0];             // Sensorrichtung "vorwaerts"
+  if (skalar(f, x_vorgabe) < 0) { f[0] = -f[0]; f[1] = -f[1]; f[2] = -f[2]; }
+#endif
+  if (!normieren(f)) return false;
+  float links[3];
+  kreuz(u, f, links);                                // oben x vorwaerts = links
+  for (int j = 0; j < 3; j++) {
+    R_akt[0][j] = f[j];          // x' vorwaerts
+    R_akt[1][j] = -u[j];         // y' abwaerts
+    R_akt[2][j] = links[j];      // z' links
+  }
+  kalibriert_je = true;
+  float abw = acosf(fminf(1.0f, fmaxf(-1.0f, skalar(f, R_MONTAGE[0])))) * 57.2958f;
+  Serial.printf("Kalibrierung ok: oben=(%.2f %.2f %.2f) vorn=(%.2f %.2f %.2f) "
+                "Querachse %.0f %%, Abweichung zur Vorgabe %.0f Grad\n",
+                u[0], u[1], u[2], f[0], f[1], f[2], anteil * 100, abw);
+  return true;
+}
+
+// ---------------------------------------------------------------
+//  STURZRICHTUNG AUS DER LIEGELAGE
+// ---------------------------------------------------------------
+// Nach einem Alarm wird die erste Ruhephase (1 s) gesucht und die
+// Schwerkraft im Trainingsrahmen ausgewertet. Auf den Knoechel-
+// Pilotdaten: vorwaerts x' ~ -0,9, rueckwaerts x' ~ +0,8,
+// seitlich |z'| ~ 1. An der Sohle haengt die Lage zusaetzlich vom
+// Sprunggelenk ab -- die Richtung ist eine Schaetzung.
+static bool     lage_aktiv = false;
+static uint32_t lage_start = 0;
+static int      lage_folge = 0;
+static float    lage_summe[3];
+
+static void lageStarten(uint32_t jetzt) {
+  lage_aktiv = true; lage_start = jetzt; lage_folge = 0;
+  memset(lage_summe, 0, sizeof(lage_summe));
+}
+
+static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
+  if (!lage_aktiv) return;
+  float betrag_a = sqrtf(skalar(m, m));
+  float betrag_w = sqrtf(skalar(m + 3, m + 3));
+  if (betrag_w < 15.0f && fabsf(betrag_a - 1.0f) < 0.1f) {
+    for (int i = 0; i < 3; i++) lage_summe[i] += m[i];
+    if (++lage_folge >= LAGE_RUHE_PROBEN) {
+      float g[3];
+      for (int i = 0; i < 3; i++) g[i] = lage_summe[i] / lage_folge;
+      const char *richtung;
+      if (g[1] < -0.8f)                        richtung = "aufrecht (kein Liegen)";
+      else if (g[0] < -0.5f || g[1] > 0.5f)    richtung = "vorwaerts (Bauchlage)";
+      else if (g[0] > 0.5f)                    richtung = "rueckwaerts (Rueckenlage)";
+      else if (fabsf(g[2]) > 0.5f)             richtung = "seitlich";
+      else                                     richtung = "unklar";
+      char msg[96];
+      snprintf(msg, sizeof(msg), "LAGE %s x=%.2f y=%.2f z=%.2f",
+               richtung, g[0], g[1], g[2]);
+      bleInfoSenden(msg);
+      lage_aktiv = false;
+    }
+  } else {
+    lage_folge = 0;
+    memset(lage_summe, 0, sizeof(lage_summe));
+  }
+  if (lage_aktiv && jetzt - lage_start > LAGE_SUCHE_MS) {
+    bleInfoSenden("LAGE keine Liegephase gefunden");
+    lage_aktiv = false;
   }
 }
 
@@ -510,7 +724,7 @@ void setup() {
   Wire.setClock(400000);
 
   if (!mpuInit()) {
-    Serial.println("MPU-6050 nicht gefunden - Verkabelung pruefen.");
+    Serial.println("IMU nicht gefunden - Verkabelung pruefen.");
     while (true) delay(1000);
   }
 
@@ -523,6 +737,18 @@ void setup() {
 
   zustand        = AUFWAKEN;
   schritte       = 0;
+  kalib_fertig   = !KALIB_AUTO;
+  kal_gyro_n = kal_gang_n = kal_ruhe_folge = 0;
+  kal_g_ruhe_ok = false;
+  memset(kal_g_gang, 0, sizeof(kal_g_gang));
+  memset(kal_ruhe_summe, 0, sizeof(kal_ruhe_summe));
+  Serial.printf("Einbaulage: %s\n", kalibriert_je ?
+                "letzte Kalibrierung (wird beim Gehen erneuert)" :
+                "Montagevorgabe (wird beim Gehen kalibriert)");
+#if TESTMODUS
+  Serial.println("TESTMODUS: Ausgabe jeder Inferenz, kein Tiefschlaf");
+  Serial.println("Format: T,<ms>,<p>,<Stimmen von 5>");
+#endif
   letzteBewegung = millis();
   memset(vote_puffer, 0, sizeof(vote_puffer));
   memset(dezim_summe, 0, sizeof(dezim_summe));
@@ -539,8 +765,29 @@ void loop() {
   if (jetzt >= naechsteMessung) {
     naechsteMessung = jetzt + 10;        // 100 Hz
 
-    float messung[KANAELE];
-    if (!mpuLeseMessung(messung)) return;
+    float roh[KANAELE], messung[KANAELE];
+    if (!mpuLeseMessung(roh)) return;
+
+    // Kalibrierung laeuft auf Sensorachsen, solange noch nicht fertig
+    if (!kalib_fertig) {
+      kalibProbe(roh);
+      if ((kal_gyro_n >= KALIB_PROBEN && schritte >= SCHRITTE_START) ||
+          schritte >= KALIB_MAX_SCHRITTE) {
+        if (!kalibBerechnen())
+          Serial.println("Kalibrierung: Rueckfall auf vorherige Einbaulage");
+        kalib_fertig = true;
+        ring_fuell = 0;                    // Fenster mit neuer Lage fuellen
+      }
+    }
+    drehen(R_akt, roh, messung);           // Beschleunigung
+    drehen(R_akt, roh + 3, messung + 3);   // Winkelgeschwindigkeit
+    lagePruefen(messung, jetzt);
+
+    if (zustand == AUFWAKEN && kalib_fertig && schritte >= SCHRITTE_START) {
+      zustand = AKTIV;
+      Serial.printf("%lu Schritte, Einbaulage kalibriert -> Inferenz aktiv\n",
+                    (unsigned long)schritte);
+    }
 
     float betrag = sqrtf(messung[0]*messung[0] +
                          messung[1]*messung[1] +
@@ -572,15 +819,27 @@ void loop() {
         float p = modellAuswerten();
         uint32_t dauer = micros() - t0;
 
+        bool alarm = (p >= 0) && votingAusloesen(p);
+#if TESTMODUS
+        (void)dauer;
+        int stimmen = 0;
+        for (int i = 0; i < VOTE_M; i++) stimmen += vote_puffer[i];
+        char zeile[48];
+        snprintf(zeile, sizeof(zeile), "T,%lu,%.3f,%d",
+                 (unsigned long)jetzt, p, stimmen);
+        bleInfoSenden(zeile);
+#else
         static uint32_t zaehler = 0;
         if (++zaehler % 50 == 0) {
           Serial.printf("p=%.3f  Inferenz %lu us  Schritte %lu\n",
                         p, (unsigned long)dauer,
                         (unsigned long)schritte);
         }
-        if (p >= 0 && votingAusloesen(p)) {
+#endif
+        if (alarm) {
           bleAlarmSenden(p);
           memset(vote_puffer, 0, sizeof(vote_puffer));
+          lageStarten(jetzt);
         }
       }
     }
@@ -595,5 +854,7 @@ void loop() {
     }
   }
 
-  if (jetzt - letzteBewegung > RUHE_BIS_SCHLAF_MS) schlafenGehen();
+#if !TESTMODUS
+  if (jetzt - letzteBewegung > RUHE_BIS_SCHLAF_MS && !lage_aktiv) schlafenGehen();
+#endif
 }

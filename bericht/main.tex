@@ -268,7 +268,7 @@ anhand der Zeitstempel auf ein exaktes $100$-Hz-Raster interpoliert.
 \end{minipage}\hspace{2mm}%
 \begin{minipage}[b]{0.44\textwidth}\centering
 \resizebox{\linewidth}{!}{\input{Bilder/einbaulage.tex}}\\[1pt]
-{\footnotesize (c) Einbaulage am Knöchel und in der Sohle}
+{\footnotesize (c) Einbaulage: Pilotaufnahmen (Knöchel), Zielposition (Sohle)}
 \end{minipage}
 \caption{Prototyp: XIAO ESP32-C6 mit IMU-Modul und Akkuanschluss (a, b)
 sowie Einbaulage des Sensors (c).}
@@ -356,16 +356,33 @@ Zielgruppe, (03) progressives Training, (04) Fuß und Orientierung,
 (05) Pilotdaten und kommerzielles Modell.
 
 \section{Firmware}
-Die Firmware liest die IMU mit $100$\,Hz, tastet auf $50$\,Hz herunter,
-hält einen Ringpuffer von $2$\,s und führt alle $200$\,ms eine Inferenz mit
-TensorFlow Lite Micro aus (int8, 9 Operatoren). Eine 3-von-5-Regel
-entscheidet über den Alarm, der per BLE gemeldet wird. Vor der Inferenz
-wird die feste Einbaulage über eine Drehmatrix in den Achsrahmen des
-Trainings überführt. Für die Sohle (Platine flach, Bauteilseite oben,
-USB-C zur Außenseite der Ferse) lautet sie $x' = x$, $y' = -z$,
-$z' = y$. Eingesetzt wird B2r, da es gegenüber Drehungen am robustesten
-ist (Abschnitt~\ref{sec:orient}); int8 und Gleitkommamodell treffen auf
-den Pilotfenstern in $96\,\%$ der Fälle dieselbe Entscheidung.
+Die Firmware ist für die Einlegesohle ausgelegt. Sie liest die IMU mit
+$100$\,Hz, tastet auf $50$\,Hz herunter, hält einen Ringpuffer von $2$\,s
+und führt alle $200$\,ms eine Inferenz mit TensorFlow Lite Micro aus
+(int8, 9 Operatoren). Eine 3-von-5-Regel entscheidet über den Alarm, der
+per BLE gemeldet wird. Eingesetzt wird B2r, da es gegenüber Drehungen am
+robustesten ist (Abschnitt~\ref{sec:orient}); int8 und Gleitkommamodell
+treffen auf den Pilotfenstern in $96\,\%$ der Fälle dieselbe Entscheidung.
+
+\textbf{Selbstkalibrierung der Einbaulage.} Vorgabe ist: IMU-Modul flach
+unter der Ferse, Chip oben, aufgedruckter X-Pfeil zu den Zehen. Da die
+Lage in einer Sohle nie exakt ist, bestimmt die Firmware sie nach jedem
+Aufwachen selbst: Die Schwerkraft im Stillstand liefert die Hochachse,
+die Hauptdrehachse der Winkelgeschwindigkeit beim Gehen die Querachse,
+und die Schiefe der Drehrate um diese Achse (die Schwungphase erzeugt die
+größten Spitzen) legt fest, wo vorn ist. Daraus folgt die Drehung in den
+Trainingsrahmen ($x'$ vorwärts, $y'$ abwärts, $z'$ links). Auf den
+Knöchelaufnahmen, rechnerisch in beliebige Lagen gedreht, stellte das
+Verfahren die Achsen in allen Fällen richtig wieder her
+(Vorwärtsstürze danach $x' = -0{,}89$ bis $-1{,}0$); an der Sohle ist es
+noch zu bestätigen.
+
+\textbf{Sturzrichtung und Testmodus.} Nach einem Alarm wertet die
+Firmware die erste Ruhephase aus und meldet die Lage als Schätzung
+(Bauchlage $\approx$ vorwärts, Rückenlage $\approx$ rückwärts, seitlich).
+Das Modell selbst unterscheidet nur Sturz und Nicht-Sturz; seine Ausgabe
+$p$ ist kein kalibrierter Wahrscheinlichkeitswert. Ein Testmodus sendet
+jede Modellausgabe über BLE, um Versuche auszuwerten.
 
 \section{Kommerzielles Modell}
 Für den Projektpartner wird ein zweites Modell nur aus Daten trainiert,
