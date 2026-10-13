@@ -21,21 +21,17 @@ hardware.
 ├── cnn_pipeline.py          Standalone 1D-CNN training
 ├── requirements.txt
 │
-├── notebook/                One notebook per report section
-│   ├── 01_basismodelle      Threshold, RF, CNN on SisFall + TFLite export
-│   ├── 02_transfer          KFall, UMAFall, FallAllD + clipping control
-│   ├── 03_fehlalarme        False-positive test, N-of-M voting
-│   ├── 04_achsen            3-axis vs 6-axis ablation + UniMiB-SHAR
-│   ├── 05_zielgruppe        WEDA-FALL, elderly vs younger subjects
-│   ├── 06_progressiv        Progressive fine-tuning (single split)
-│   ├── 07_progressiv_cv     Same, 5-fold cross-validated
-│   ├── 08_hardneg_cv        Hard-negative weighting, cross-validated
-│   ├── 09_pilotdaten        Recordings from the target hardware,
-│   │                        base vs. lower-limb model
-│   ├── 10_fussdomaene       Placement curve (9 body positions + foot),
-│   │                        training with leg/foot data
-│   └── 11_orientierung_matrix  Sensor orientation (mirror/rotation) and
-│                            training-chain matrix incl. augmentation
+├── notebook/                Run in order 01 → 05 (Colab, GPU)
+│   ├── 01_rumpf_basismodell     Threshold, RF, CNN on SisFall; 3 vs 6 axes
+│   ├── 02_transfer_alltag       KFall/UMAFall/FallAllD + clipping; FP test
+│   │                            and N-of-M voting; WEDA-FALL elderly
+│   ├── 03_progressiv            Progressive fine-tuning and hard negatives,
+│   │                            both 5-fold cross-validated
+│   ├── 04_fuss_orientierung     Placement curve, lower-limb training,
+│   │                            orientation, training matrix, before/after
+│   │                            foot data (incl. Smart-Insole, report only)
+│   └── 05_pilot_kommerziell     Own recordings (waist, ankles); commercial
+│                                model without Smart-Insole/MobiAct + export
 │
 ├── firmware/                Arduino sketches for ESP32-C6 + MPU-6050/6500
 │   ├── CleverSole/          Full detector: steps, inference, voting,
@@ -236,7 +232,7 @@ would have hidden this.
 The central open question: how well does a model trained on trunk data
 transfer to a foot-mounted sensor? No public dataset contains falls
 recorded at the foot, so the question is answered by combining
-sources that each cover one aspect (notebook `10_fussdomaene`,
+sources that each cover one aspect (notebook `04_fuss_orientierung`,
 report chapter 6).
 
 **What the foot signal looks like.** Two insole datasets recorded with
@@ -314,7 +310,7 @@ mirroring and rotation about the leg axis barely matter (model was
 trained on both shins), but arbitrary 3-D rotations drop sensitivity to
 as low as 14 %. Mirroring the *left* CAPPIMU sensors reproduces the
 right-side results (arm 6 → 60 %, wrist 10 → 60 %, shin 17 → 42 %), so
-the left/right gap is entirely axis orientation (notebook 11).
+the left/right gap is entirely axis orientation (notebook 04, part C).
 Rotation augmentation (**B2r**) raises shin sensitivity under random
 rotation from 60.6 % to 78.0 % (+17.3 pp, 5/5 folds) and cuts sole
 false alarms (ImbalanSense 22.6 → 3.9/h, Smart-Insole 58.7 → 17.7/h).
@@ -456,10 +452,10 @@ serial output goes to the UART pins instead of USB).
 - [x] Firmware: sensor, step detection, deep sleep, BLE
 - [ ] TFLite deployment on device
 - [x] Foot-domain datasets: loaders and evaluation notebook
-- [x] Placement curve and lower-limb training (notebook 10)
+- [x] Placement curve and lower-limb training (notebook 04)
 - [x] Pilot recordings at waist and both ankles (target hardware)
 - [ ] Pilot recordings in the insole (multi-person, both feet)
-- [ ] Orientation test and training matrix (notebook 11)
+- [x] Orientation test and training matrix (notebook 04)
 - [ ] Voting parameters from pilot data
 - [ ] Long-lie detection
 
