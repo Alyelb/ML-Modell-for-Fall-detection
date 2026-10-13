@@ -4,7 +4,7 @@
 %   Aly Elbermawy · TH Mittelhessen · 2026
 %
 %   pdflatex main · bibtex main · pdflatex main · pdflatex main
-%   Bilder in Bilder/: thm_logo.(pdf|png), foto_*.jpg (optional)
+%   Bilder in Bilder/: thm_logo.png, foto_platine*.jpg, *.tex (TikZ)
 %==================================================================
 \documentclass[11pt,a4paper,oneside,parskip=half,open=any,
                numbers=noenddot,listof=totoc,bibliography=totoc]{scrreprt}
@@ -61,7 +61,7 @@
 \begin{titlepage}
 \centering
 \IfFileExists{Bilder/thm_logo.pdf}{\includegraphics[width=6.5cm]{Bilder/thm_logo.pdf}}{%
-\IfFileExists{Bilder/thm_logo.png}{\includegraphics[width=6.5cm]{Bilder/thm_logo.png}}{%
+\IfFileExists{Bilder/thm_logo.png}{\includegraphics[width=10cm]{Bilder/thm_logo.png}}{%
 \IfFileExists{Bilder/thm_logo.jpg}{\includegraphics[width=6.5cm]{Bilder/thm_logo.jpg}}{%
 {\Huge\bfseries\color{thmgrau} THM\par}\vspace{2pt}
 {\small\color{thmgrau} TECHNISCHE HOCHSCHULE MITTELHESSEN\par}}}}
@@ -243,31 +243,35 @@ Armen, Schienbein und Knöchel vor; an der Sohle nur Alltagsdaten.}
 %==================================================================
 
 \section{Prototyp und Datenaufnahme}
-Der Prototyp besteht aus einem ESP32-C6 (RISC-V, $160$\,MHz, BLE) und einer
-MPU-6500 ($\pm 16$\,g, $\pm 2000\,^{\circ}$/s, $100$\,Hz, digitales
-Tiefpassfilter aktiv). Für die Pilotdaten wurde eine eigene Firmware
-(\emph{DatenLogger}) geschrieben: Aufnahme mit $100$\,Hz in den internen
-Flash, Bedienung per Smartphone über Bluetooth (Aktivität wählen,
-Start/Stopp), automatischer Stopp nach $120$\,s und Auslesen per
-Python-Skript. Da Flash-Schreibzugriffe einzelne Abtastwerte verzögern,
-werden die Daten anhand der Zeitstempel auf ein exaktes $100$-Hz-Raster
-interpoliert.
+Der Prototyp besteht aus einem Seeed Studio XIAO ESP32-C6 (RISC-V,
+$160$\,MHz, BLE, USB-C) und einem IMU-Modul (HW-123, Aufdruck MPU-6050;
+die Firmware erkennt den Chip über das Register \texttt{WHO\_AM\_I}), verbunden
+über I\textsuperscript{2}C und versorgt über einen Akkuanschluss
+(Abbildung~\ref{fig:fotos}). Die IMU läuft mit $\pm 16$\,g,
+$\pm 2000\,^{\circ}$/s und $100$\,Hz bei aktivem digitalem Tiefpassfilter.
+Für die Pilotdaten wurde eine eigene Firmware (\emph{DatenLogger})
+geschrieben: Aufnahme mit $100$\,Hz in den internen Flash, Bedienung per
+Smartphone über Bluetooth (Aktivität wählen, Start/Stopp), automatischer
+Stopp nach $120$\,s und Auslesen per Python-Skript. Da
+Flash-Schreibzugriffe einzelne Abtastwerte verzögern, werden die Daten
+anhand der Zeitstempel auf ein exaktes $100$-Hz-Raster interpoliert.
 
 \begin{figure}[H]
 \centering
-\begin{minipage}[t]{0.31\textwidth}\centering
-\foto{foto_platine.jpg}{\linewidth}{Foto: ESP32-C6 + MPU-6500}\\[-1pt]
-{\footnotesize (a) Prototyp}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.31\textwidth}\centering
-\foto{foto_knoechel.jpg}{\linewidth}{Foto: Befestigung am Knöchel}\\[-1pt]
-{\footnotesize (b) Knöchel, USB-C oben}
-\end{minipage}\hfill
-\begin{minipage}[t]{0.31\textwidth}\centering
-\foto{foto_sohle.jpg}{\linewidth}{Foto: Lage in der Sohle}\\[-1pt]
-{\footnotesize (c) Sohle (Zielposition)}
+\begin{minipage}[b]{0.25\textwidth}\centering
+\includegraphics[width=\linewidth]{Bilder/foto_platine.jpg}\\[1pt]
+{\footnotesize (a) Oberseite}
+\end{minipage}\hspace{2mm}%
+\begin{minipage}[b]{0.25\textwidth}\centering
+\includegraphics[width=\linewidth]{Bilder/foto_platine_unten.jpg}\\[1pt]
+{\footnotesize (b) Unterseite}
+\end{minipage}\hspace{2mm}%
+\begin{minipage}[b]{0.44\textwidth}\centering
+\resizebox{\linewidth}{!}{\input{Bilder/einbaulage.tex}}\\[1pt]
+{\footnotesize (c) Einbaulage am Knöchel und in der Sohle}
 \end{minipage}
-\caption{Prototyp und Einbaulagen.}
+\caption{Prototyp: XIAO ESP32-C6 mit IMU-Modul und Akkuanschluss (a, b)
+sowie Einbaulage des Sensors (c).}
 \label{fig:fotos}
 \end{figure}
 

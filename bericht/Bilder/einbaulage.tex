@@ -1,0 +1,44 @@
+% Einbaulage des Prototyps: (a) Knoechel, Seitenansicht; (b) Sohle, Draufsicht
+\begin{tikzpicture}[x=1cm,y=1cm,
+  bein/.style={fill=black!10,draw=black!40,line width=0.5pt},
+  platine/.style={fill=thmgrau!85,draw=black!70,line width=0.4pt,rounded corners=0.5pt},
+  usb/.style={fill=black!25,draw=black!70,line width=0.3pt},
+  pf/.style={-{Stealth[length=2mm]},line width=0.8pt},
+  txt/.style={font=\scriptsize,align=center}]
+
+% ---------------- (a) Knoechel, Seitenansicht von aussen ----------------
+\begin{scope}
+  % Unterschenkel und Fuss (Blick auf die Aussenseite, Zehen rechts)
+  \draw[bein] (-0.55,4.2) -- (-0.5,1.3) .. controls (-0.55,0.75) and (-0.75,0.5) .. (-0.75,0.25)
+    .. controls (-0.75,0.0) and (-0.6,-0.05) .. (-0.3,-0.05) -- (2.3,-0.05)
+    .. controls (2.6,-0.05) and (2.65,0.25) .. (2.35,0.35)
+    .. controls (1.6,0.55) and (0.9,0.8) .. (0.55,1.3) -- (0.55,4.2);
+  \draw[black!30] (-0.05,0.55) circle (0.13);                      % Knoechel
+  % Platine an der Aussenseite oberhalb des Knoechels, USB-C oben
+  \draw[platine] (-0.28,0.95) rectangle (0.18,1.55);
+  \draw[usb] (-0.14,1.55) rectangle (0.04,1.68);
+  \draw[pf,thmrot] (-0.05,1.75) -- (-0.05,2.45) node[above,txt,text=thmrot] {USB-C\\oben};
+  \draw[pf,thmgruen!70!black] (0.25,1.25) -- (1.05,1.25) node[right,txt,text=thmgruen!70!black] {vorn};
+  \node[txt] at (0.9,-0.5) {Knöchel, Seitenansicht};
+  \node[txt,text=black!60] at (0.9,-0.85) {Bauteilseite außen, links und rechts gleich};
+\end{scope}
+
+% ---------------- (b) Sohle, Draufsicht (rechter Fuss) ----------------
+\begin{scope}[shift={(5.3,0)}]
+  % Sohlenumriss, Ferse unten, Zehen oben; Aussenseite rechts
+  \draw[bein] (0,0) .. controls (-0.75,0) and (-0.8,0.9) .. (-0.65,1.7)
+    .. controls (-0.55,2.4) and (-0.95,3.2) .. (-0.6,3.9)
+    .. controls (-0.3,4.45) and (0.55,4.45) .. (0.8,3.8)
+    .. controls (1.0,3.2) and (0.75,2.4) .. (0.75,1.7)
+    .. controls (0.75,0.9) and (0.75,0) .. (0,0);
+  % Platine flach unter der Ferse, USB-C zur Aussenseite (Ferse aussen)
+  \draw[platine] (-0.25,0.45) rectangle (0.3,1.0);
+  \draw[usb] (0.3,0.63) rectangle (0.42,0.82);
+  \draw[pf,thmrot] (0.5,0.72) -- (1.3,0.72) node[right,txt,text=thmrot] {USB-C zur\\Außenseite};
+  \node[txt,text=white] at (0.02,0.72) {$\odot$};
+  \node[txt] at (0.05,2.3) {Sohle};
+  \draw[pf,thmgruen!70!black] (-1.2,1.6) -- (-1.2,2.6) node[above,txt,text=thmgruen!70!black] {Zehen};
+  \node[txt] at (0.1,-0.5) {Sohle, Draufsicht};
+  \node[txt,text=black!60] at (0.1,-0.85) {flach, Bauteilseite oben ($\odot$)};
+\end{scope}
+\end{tikzpicture}
