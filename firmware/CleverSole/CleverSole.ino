@@ -44,8 +44,14 @@
 
 // Kalibrierung der Einbaulage (siehe Abschnitt KALIBRIERUNG)
 #define KALIB_AUTO          1       // 0 = nur Montagevorgabe aus modell.h
-#define KALIB_RICHTUNG_AUTO 1       // Vorwaertsrichtung aus dem Gang;
+#define KALIB_RICHTUNG_AUTO 0       // 1 = Vorwaertsrichtung aus dem Gang (unsicher);
                                     // 0 = aus der Montagevorgabe (X zu den Zehen)
+#define KALIB_MAX_ABW_GRAD  45.0f   // weicht "vorn" weiter von der Vorgabe ab,
+                                    // wird nur die Neigung (Schwerkraft) korrigiert
+
+// Rechenkern: 1 = eigene int8-Kerne (netz_int8.h, empfohlen),
+//             0 = TensorFlow Lite Micro
+#define EIGENE_KERNE        1
 #define KALIB_GYRO_MIN_DPS  40.0f   // nur deutliche Drehungen beim Gehen
 #define KALIB_PROBEN        300     // Gyro-Proben mit deutlicher Drehung (~10-15 Schritte)
 #define KALIB_MAX_SCHRITTE  60      // spaetestens dann mit dem Vorhandenen rechnen
@@ -514,6 +520,7 @@ static bool kalibBerechnen() {
 
   // Vorzeichen der Querachse
   float f[3];
+  bool nur_neigung = false;
 #if KALIB_RICHTUNG_AUTO
   double schiefe = 0;
   for (int k = 0; k < kal_gyro_n; k++) {
@@ -528,6 +535,21 @@ static bool kalibBerechnen() {
   if (skalar(f, x_vorgabe) < 0) { f[0] = -f[0]; f[1] = -f[1]; f[2] = -f[2]; }
 #endif
   if (!normieren(f)) return false;
+  // Plausibilitaet: Liegt "vorn" weit neben dem X-Pfeil der Vorgabe (z. B.
+  // weil das Modul in der Hand statt im Schuh bewegt wurde), wird nur die
+  // Neigung aus der Schwerkraft uebernommen und die Vorgabe in die
+  // Horizontale projiziert. Genau diese Ausrichtung wurde auf den
+  // Pilotdaten geprueft (alle 67 Stuerze erkannt).
+  {
+    float xv[3] = {R_MONTAGE[0][0], R_MONTAGE[0][1], R_MONTAGE[0][2]};
+    float dv = skalar(xv, u);
+    for (int i = 0; i < 3; i++) xv[i] -= dv * u[i];
+    if (normieren(xv) &&
+        acosf(fminf(1.0f, fmaxf(-1.0f, skalar(f, xv)))) * 57.2958f > KALIB_MAX_ABW_GRAD) {
+      memcpy(f, xv, sizeof(f));
+      nur_neigung = true;
+    }
+  }
   float links[3];
   kreuz(u, f, links);                                // oben x vorwaerts = links
   for (int j = 0; j < 3; j++) {
@@ -538,8 +560,9 @@ static bool kalibBerechnen() {
   kalibriert_je = true;
   float abw = acosf(fminf(1.0f, fmaxf(-1.0f, skalar(f, R_MONTAGE[0])))) * 57.2958f;
   Serial.printf("Kalibrierung ok: oben=(%.2f %.2f %.2f) vorn=(%.2f %.2f %.2f) "
-                "Querachse %.0f %%, Abweichung zur Vorgabe %.0f Grad\n",
-                u[0], u[1], u[2], f[0], f[1], f[2], anteil * 100, abw);
+                "Querachse %.0f %%, Abweichung zur Vorgabe %.0f Grad%s\n",
+                u[0], u[1], u[2], f[0], f[1], f[2], anteil * 100, abw,
+                nur_neigung ? " (Gang unklar: nur Neigung korrigiert)" : "");
   return true;
 }
 
@@ -652,7 +675,66 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
 // ---------------------------------------------------------------
 // Modell: siehe modell.h (bereits oben eingebunden)
 
-#if MODELL_VERFUEGBAR
+#if MODELL_VERFUEGBAR && EIGENE_KERNE
+  // Eigene int8-Kerne: dieselben Rechenschritte wie TFLite, aber ohne
+  // Bibliothek. Auf dem ESP32-C6 lieferte TFLite Micro eine konstante
+  // Ausgabe (p = 0,47) -- unabhaengig vom Modell. Faltungen sind am PC
+  // bitgleich mit TFLite geprueft (tools/export_firmware_model.py).
+  #include "netz_int8.h"
+  static int8_t netz_eingang[NETZ_LEN * NETZ_KANAELE];
+
+  static float netzSelbsttest() {
+    // Sollwerte aus modell_sohle.h: roher TFLite-Ausgang je Muster,
+    // umgerechnet in p. Toleranz 0,06 (der Mittelwert rundet +-1 anders).
+    const int8_t muster[MODELL_TEST_N] = MODELL_TEST_MUSTER;
+    const int    soll[MODELL_TEST_N]   = MODELL_TEST_SOLL;
+    float max_abw = 0;
+    for (int i = 0; i < MODELL_TEST_N; i++) {
+      memset(netz_eingang, muster[i], sizeof(netz_eingang));
+      float p = netzRechnen(netz_eingang);
+      float p_soll = (soll[i] + 128) / 256.0f;
+      float abw = fabsf(p - p_soll);
+      if (abw > max_abw) max_abw = abw;
+      Serial.printf("Selbsttest %d: alle=%4d  p=%.3f  soll=%.3f  %s\n", i,
+                    (int)muster[i], p, p_soll, abw < 0.06f ? "OK" : "FALSCH");
+    }
+    return max_abw;
+  }
+
+  static bool modellInit() {
+    uint32_t t0 = micros();
+    float abw = netzSelbsttest();
+    Serial.printf("Modell (eigene Kerne) %s, %lu us je Fenster\n",
+                  abw < 0.06f ? "ok" : "WEICHT AB -- modell_netz.h neu erzeugen",
+                  (unsigned long)((micros() - t0) / MODELL_TEST_N));
+    return abw < 0.06f;
+  }
+
+  static float modellAuswerten() {
+    float mittel[KANAELE] = {0}, streuung[KANAELE] = {0};
+    for (int c = 0; c < KANAELE; c++) {
+      for (int t = 0; t < FENSTER_LEN; t++) mittel[c] += ring[(ring_pos + t) % FENSTER_LEN][c];
+      mittel[c] /= FENSTER_LEN;
+    }
+    for (int c = 0; c < KANAELE; c++) {
+      for (int t = 0; t < FENSTER_LEN; t++) {
+        float d = ring[(ring_pos + t) % FENSTER_LEN][c] - mittel[c];
+        streuung[c] += d * d;
+      }
+      streuung[c] = sqrtf(streuung[c] / FENSTER_LEN) + 1e-8f;
+    }
+    for (int t = 0; t < FENSTER_LEN; t++) {
+      int idx = (ring_pos + t) % FENSTER_LEN;
+      for (int c = 0; c < KANAELE; c++) {
+        float norm = (ring[idx][c] - mittel[c]) / streuung[c];
+        int   q    = lroundf(norm / NETZ_EIN_SKALA) + NETZ_EIN_NULL;
+        netz_eingang[t * KANAELE + c] = (int8_t)(q < -128 ? -128 : (q > 127 ? 127 : q));
+      }
+    }
+    return netzRechnen(netz_eingang);
+  }
+
+#elif MODELL_VERFUEGBAR
   // Arduino-ESP32-Core 3.x bringt esp-tflite-micro mit. Es darf nur
   // EINE TFLM-Quelle eingebunden sein: sind Header und kompilierte
   // Bibliothek aus verschiedenen Versionen, laeuft Invoke() scheinbar
@@ -682,7 +764,7 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
     resolver.AddMaxPool2D();
     resolver.AddMean();               // GlobalAveragePooling
     resolver.AddFullyConnected();
-    resolver.AddAdd();                // BatchNorm (nicht gefaltet)
+    resolver.AddAdd();                // nur fuer Modelle mit ungefalteter BatchNorm
     resolver.AddMul();
     resolver.AddLogistic();           // Sigmoid
     resolver.AddReshape();
@@ -908,10 +990,13 @@ void loop() {
         bleInfoSenden(zeile);
 #else
         static uint32_t zaehler = 0;
-        if (++zaehler % 50 == 0) {
-          Serial.printf("p=%.3f  Inferenz %lu us  Schritte %lu\n",
-                        p, (unsigned long)dauer,
+        static float p_max = 0;
+        if (p > p_max) p_max = p;
+        if (++zaehler % 50 == 0) {           // alle 10 s eine Zeile
+          Serial.printf("p=%.3f  max der letzten 10 s=%.3f  Inferenz %lu us  Schritte %lu\n",
+                        p, p_max, (unsigned long)dauer,
                         (unsigned long)schritte);
+          p_max = 0;
         }
 #endif
         if (alarm) {

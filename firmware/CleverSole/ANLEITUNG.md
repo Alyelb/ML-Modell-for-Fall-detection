@@ -82,7 +82,36 @@ prüft int8 gegen float und schreibt die Sollwerte des Selbsttests
 Steht in der Ausgabe `MUL` oder `ADD` bei den Operatoren, das Modell
 nicht hochladen.
 
-## 3a. Meldungen über Bluetooth
+## 3a. Rechenkern: eigene int8-Kerne (Standard)
+
+Auf dem ESP32-C6 lieferte TensorFlow Lite Micro eine vom Eingang
+unabhängige, konstante Ausgabe (`p=0.469`), mit gefalteter wie mit
+ungefalteter BatchNorm. Die Firmware rechnet das Netz deshalb
+standardmäßig mit eigenen Kernen (`netz_int8.h`, `#define EIGENE_KERNE 1`):
+dieselben int8-Rechenschritte wie TFLite, ohne Bibliothek. Die Gewichte
+stehen in `modell_netz.h`, das `export_firmware_model.py` zusammen mit
+`modell_sohle.h` erzeugt und am PC gegen TFLite prüft (Faltungen
+bitgleich, Entscheidungen gleich).
+
+Beim Start erscheint immer:
+
+```
+Selbsttest 0: alle=   0  p=0.000  soll=0.000  OK
+...
+Selbsttest 4: alle= -13  p=0.718  soll=0.719  OK
+Modell (eigene Kerne) ok, ... us je Fenster
+```
+
+Im Betrieb erscheint alle 10 s `p=... max der letzten 10 s=...`. Beim
+Gehen bleibt p nahe 0; ein konstanter Wert über Minuten ist ein Fehler.
+
+**Kalibrierung:** Standard ist jetzt `KALIB_RICHTUNG_AUTO 0`: Hochachse
+und Neigung aus der Schwerkraft, „vorn“ aus dem X-Pfeil. Weicht die aus
+dem Gang bestimmte Querachse mehr als 45° davon ab (z. B. Modul in der
+Hand bewegt), wird nur die Neigung korrigiert
+(`... (Gang unklar: nur Neigung korrigiert)`).
+
+## 3b. Meldungen über Bluetooth
 
 Beispiel eines Alarms (Reihenfolge wie gesendet):
 
@@ -107,7 +136,7 @@ feste Grenzen; es bewertet das gesamte 2-s-Signal.
 Weitere Zeilen: `LAGE keine Liegephase gefunden` (15 s ohne Ruhe),
 Batteriestand über `180F`.
 
-## 3b. Testmodus
+## 3c. Testmodus
 
 `#define TESTMODUS 1` in `CleverSole.ino`: jede Modellausgabe wird
 alle 0,2 s als `T,<ms>,<Sturz %>,<Stimmen von 5>` über Serial und BLE (`FFF2`) gesendet, der Tiefschlaf ist

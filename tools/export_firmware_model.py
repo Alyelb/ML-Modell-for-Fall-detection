@@ -18,6 +18,8 @@ BatchNorm-Schichten werden vorher automatisch in die folgende Faltung
 bzw. Dense-Schicht eingerechnet (siehe bn_falten).
 
 Ausgabe:
+    firmware/CleverSole/modell_netz.h  Gewichte fuer die eigenen Kerne
+                                       (netz_int8.h, Standard der Firmware)
     firmware/CleverSole/<Argument 3>   C-Array, 16-Byte-ausgerichtet
     <modell>_int8.tflite             zum Archivieren
     Liste der verwendeten Operatoren (muss zum Resolver in
@@ -197,6 +199,21 @@ def main():
         f"const unsigned int modell_tflite_len = {len(blob)};\n\n"
         "#endif\n")
     print(f"geschrieben     : {ziel}")
+
+    # --- eigene Kerne (netz_int8.h): Gewichte schreiben und pruefen -----
+    from netz_export import netz_header, netz_pruefen
+    netz_ziel = ziel.with_name("modell_netz.h")
+    netz_header(blob, netz_ziel)
+    q_all = np.clip(np.round(X / s_in) + z_in, -128, 127).astype(np.int8)
+    auswahl = np.r_[np.where(y == 1)[0], np.where(y == 0)[0][:300]]
+    try:
+        erg = netz_pruefen(blob, q_all[auswahl])
+        print(f"eigene Kerne    : Faltungen bitgleich in "
+              f"{1 - erg['faltung_abweichend'] / len(auswahl):.1%} der Fenster, "
+              f"Entscheidung gleich {erg['entscheidung_gleich']:.1%}, max. |dp| {erg['max_dp']:.3f}")
+    except FileNotFoundError:
+        print("eigene Kerne    : kein C++-Compiler (g++) gefunden -- Pruefung uebersprungen")
+    print(f"geschrieben     : {netz_ziel}")
 
 
 if __name__ == "__main__":
