@@ -21,6 +21,7 @@
  */
 
 #include <Wire.h>
+#include <stdarg.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -46,6 +47,11 @@
 // als Zeile "LIVE  Sturz 3%  [..........]  Stimmen 0/5  kein Sturz",
 // 0 = nur alle 10 s eine Zusammenfassung.
 #define LIVE_AUSGABE        1
+
+// Nach einem Alarm anhalten, bis 'R' kommt (seriell oder per App
+// "Serial Bluetooth Terminal"). Solange wird nicht ausgewertet und das
+// Board schlaeft nicht ein. Zum Aktivieren die naechste Zeile einkommentieren.
+// #define NACH_STURZ_AUF_R_WARTEN
 
 // Kalibrierung der Einbaulage (siehe Abschnitt KALIBRIERUNG)
 #define KALIB_AUTO          1       // 0 = nur Montagevorgabe aus modell.h
@@ -170,6 +176,47 @@ static BLECharacteristic *chrAlarm    = nullptr;
 static BLECharacteristic *chrInfo     = nullptr;
 static bool verbunden = false;
 
+// Nordic UART Service: Text-Konsole fuer die App "Serial Bluetooth
+// Terminal" (wie beim DatenLogger). Alles, was seriell erscheint, geht
+// auch dorthin; Befehle aus der App kommen ueber RX an.
+#define NUS_SVC "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define NUS_RX  "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"   // Handy -> Board
+#define NUS_TX  "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"   // Board -> Handy
+static BLECharacteristic *chrTX = nullptr;
+static char ble_puffer[32];
+static volatile uint8_t ble_kopf = 0, ble_ende = 0;
+
+class RxCB : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *c) override {
+    String d = c->getValue();
+    for (size_t i = 0; i < d.length(); i++) {
+      uint8_t n = (ble_kopf + 1) % sizeof(ble_puffer);
+      if (n == ble_ende) break;              // Puffer voll
+      ble_puffer[ble_kopf] = d[i];
+      ble_kopf = n;
+    }
+  }
+};
+
+// Ausgabe gleichzeitig seriell und an die App
+static void out(const char *fmt, ...) {
+  char buf[200];
+  va_list ap; va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  Serial.print(buf);
+  if (verbunden && chrTX) {
+    size_t len = strlen(buf);
+    for (size_t off = 0; off < len; off += 160) {
+      size_t n = (len - off > 160) ? 160 : (len - off);
+      chrTX->setValue((uint8_t*)(buf + off), n);
+      chrTX->notify();
+      if (off + n < len) delay(4);
+    }
+  }
+}
+static void outln(const char *msg) { out("%s\n", msg); }
+
 class ServerCB : public BLEServerCallbacks {
   void onConnect(BLEServer*)    override { verbunden = true;  }
   void onDisconnect(BLEServer* s) override {
@@ -235,7 +282,7 @@ static bool mpuInit() {
     case 0x71: name = "MPU-9250"; break;
     default:   name = "unbekannt"; break;
   }
-  Serial.printf("Sensor: %s (WHO_AM_I = 0x%02X)\n", name, chip_id);
+  out("Sensor: %s (WHO_AM_I = 0x%02X)\n", name, chip_id);
 
   if (chip_id != 0x68 && chip_id != 0x70 && chip_id != 0x71) {
     return false;
@@ -292,7 +339,7 @@ static void mpuBewegungsInterrupt() {
 
 
 static void schlafenGehen() {
-  Serial.printf("Ruhe -> Tiefschlaf (Zyklus %lu)\n",
+  out("Ruhe -> Tiefschlaf (Zyklus %lu)\n",
                 (unsigned long)schlafzyklen);
   Serial.flush();
 
@@ -356,6 +403,14 @@ static void bleInit() {
   chrInfo->addDescriptor(new BLE2902());
   svcFall->start();
 
+  BLEService *svcNus = server->createService(NUS_SVC);
+  chrTX = svcNus->createCharacteristic(NUS_TX, BLECharacteristic::PROPERTY_NOTIFY);
+  chrTX->addDescriptor(new BLE2902());
+  BLECharacteristic *rx = svcNus->createCharacteristic(NUS_RX,
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  rx->setCallbacks(new RxCB());
+  svcNus->start();
+
   BLEAdvertising *adv = BLEDevice::getAdvertising();
   adv->addServiceUUID(UUID_BATT_SVC);
   adv->addServiceUUID(UUID_FALL_SVC);
@@ -379,12 +434,12 @@ static void bleInit() {
   BLEDevice::startAdvertising();
 
   chrBatterie->setValue(&stand, 1);
-  Serial.printf("BLE aktiv als \"%s\", Batterie %u %%\n",
+  out("BLE aktiv als \"%s\", Batterie %u %%\n",
                 GERAETENAME, stand);
 }
 
 static void bleInfoSenden(const char *msg) {
-  Serial.println(msg);
+  outln(msg);
   if (chrInfo) {
     chrInfo->setValue((uint8_t*)msg, strlen(msg));
     if (verbunden) chrInfo->notify();
@@ -397,7 +452,7 @@ static void bleAlarmSenden(float wahrscheinlichkeit) {
   snprintf(msg, sizeof(msg), "STURZ %d%% n=%lu batt=%u",
            (int)lroundf(wahrscheinlichkeit * 100.0f),
            (unsigned long)alarme_gesamt, batterieProzent());
-  Serial.println(msg);
+  outln(msg);
   if (chrAlarm) {
     chrAlarm->setValue((uint8_t*)msg, strlen(msg));
     if (verbunden) chrAlarm->notify();
@@ -519,7 +574,7 @@ static bool kalibBerechnen() {
   float spur = C[0][0] + C[1][1] + C[2][2];
   float anteil = (spur > 0) ? lambda / spur : 0;
   if (anteil < 0.5f) {
-    Serial.printf("Kalibrierung: keine klare Querachse (%.2f) -- Vorgabe bleibt\n", anteil);
+    out("Kalibrierung: keine klare Querachse (%.2f) -- Vorgabe bleibt\n", anteil);
     return false;
   }
 
@@ -564,7 +619,7 @@ static bool kalibBerechnen() {
   }
   kalibriert_je = true;
   float abw = acosf(fminf(1.0f, fmaxf(-1.0f, skalar(f, R_MONTAGE[0])))) * 57.2958f;
-  Serial.printf("Kalibrierung ok: oben=(%.2f %.2f %.2f) vorn=(%.2f %.2f %.2f) "
+  out("Kalibrierung ok: oben=(%.2f %.2f %.2f) vorn=(%.2f %.2f %.2f) "
                 "Querachse %.0f %%, Abweichung zur Vorgabe %.0f Grad%s\n",
                 u[0], u[1], u[2], f[0], f[1], f[2], anteil * 100, abw,
                 nur_neigung ? " (Gang unklar: nur Neigung korrigiert)" : "");
@@ -700,7 +755,7 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
       float p_soll = (soll[i] + 128) / 256.0f;
       float abw = fabsf(p - p_soll);
       if (abw > max_abw) max_abw = abw;
-      Serial.printf("Selbsttest %d: alle=%4d  p=%.3f  soll=%.3f  %s\n", i,
+      out("Selbsttest %d: alle=%4d  p=%.3f  soll=%.3f  %s\n", i,
                     (int)muster[i], p, p_soll, abw < 0.06f ? "OK" : "FALSCH");
     }
     return max_abw;
@@ -709,7 +764,7 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
   static bool modellInit() {
     uint32_t t0 = micros();
     float abw = netzSelbsttest();
-    Serial.printf("Modell (eigene Kerne) %s, %lu us je Fenster\n",
+    out("Modell (eigene Kerne) %s, %lu us je Fenster\n",
                   abw < 0.06f ? "ok" : "WEICHT AB -- modell_netz.h neu erzeugen",
                   (unsigned long)((micros() - t0) / MODELL_TEST_N));
     return abw < 0.06f;
@@ -757,7 +812,7 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
   static bool modellInit() {
     const tflite::Model *m = tflite::GetModel(modell_tflite);
     if (m->version() != TFLITE_SCHEMA_VERSION) {
-      Serial.println("Modell: falsche Schema-Version");
+      outln("Modell: falsche Schema-Version");
       return false;
     }
     // Genau die Operatoren aus modell.h (Kopfkommentar). Wird ein
@@ -778,7 +833,7 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
         m, resolver, arena, ARENA_GROESSE);
     interp = &statischer;
     if (interp->AllocateTensors() != kTfLiteOk) {
-      Serial.println("AllocateTensors fehlgeschlagen - Arena zu klein?");
+      outln("AllocateTensors fehlgeschlagen - Arena zu klein?");
       return false;
     }
     eingang = interp->input(0);
@@ -795,22 +850,22 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
       for (int i = 0; i < MODELL_TEST_N; i++) {
         memset(eingang->data.int8, muster[i], FENSTER_LEN * KANAELE);
         if (interp->Invoke() != kTfLiteOk) {
-          Serial.println("Selbsttest: Invoke fehlgeschlagen"); fehler++; break;
+          outln("Selbsttest: Invoke fehlgeschlagen"); fehler++; break;
         }
         const int r = ausgang->data.int8[0];
         if (r != soll[i]) fehler++;
-        Serial.printf("Selbsttest %d: alle=%4d  roh=%5d  soll=%5d  %s\n",
+        out("Selbsttest %d: alle=%4d  roh=%5d  soll=%5d  %s\n",
                       i, (int)muster[i], r, soll[i],
                       r == soll[i] ? "OK" : "FALSCH");
       }
       if (fehler) {
-        Serial.println("ACHTUNG: TFLM rechnet anders als der Konverter. "
+        outln("ACHTUNG: TFLM rechnet anders als der Konverter. "
                        "Haeufigste Ursache: zwei TFLM-Bibliotheken im "
                        "Build, oder Operatoren mit Broadcast im Graphen.");
       }
     }
 #endif
-    Serial.printf("Modell geladen. Arena benutzt: %u von %u Byte\n",
+    out("Modell geladen. Arena benutzt: %u von %u Byte\n",
                   interp->arena_used_bytes(), ARENA_GROESSE);
     return true;
   }
@@ -871,6 +926,22 @@ static bool votingAusloesen(float p) {
 //  SETUP
 // ---------------------------------------------------------------
 static bool modellBereit = false;
+static bool warte_auf_r = false;     // nur mit NACH_STURZ_AUF_R_WARTEN
+
+// Befehle (seriell oder App): R = nach Sturz weitermachen
+static void befehl(char c) {
+  if (c == 'r' || c == 'R') {
+    if (warte_auf_r) {
+      warte_auf_r = false;
+      memset(vote_puffer, 0, sizeof(vote_puffer));
+      ring_fuell = 0;                  // frisches Fenster nach dem Aufstehen
+      letzteBewegung = millis();
+      outln("R erhalten -> Auswertung laeuft weiter");
+    } else {
+      outln("R: es wird gerade nicht gewartet");
+    }
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -881,14 +952,14 @@ void setup() {
       (grund == ESP_SLEEP_WAKEUP_GPIO)  ? "Bewegung (INT)" :
       (grund == ESP_SLEEP_WAKEUP_TIMER) ? "Zeitgeber (Rueckfall)" :
                                           "Kaltstart";
-  Serial.printf("\n--- CleverSole (%s, Zyklus %lu) ---\n",
+  out("\n--- CleverSole (%s, Zyklus %lu) ---\n",
                 grundText, (unsigned long)schlafzyklen);
 
   Wire.begin(PIN_SDA, PIN_SCL);
   Wire.setClock(400000);
 
   if (!mpuInit()) {
-    Serial.println("IMU nicht gefunden - Verkabelung pruefen.");
+    outln("IMU nicht gefunden - Verkabelung pruefen.");
     while (true) delay(1000);
   }
 
@@ -896,7 +967,7 @@ void setup() {
   bleInit();
   modellBereit = modellInit();
   if (!modellBereit) {
-    Serial.println("Kein Modell -- nur Schrittzaehlung und Schlaflogik.");
+    outln("Kein Modell -- nur Schrittzaehlung und Schlaflogik.");
   }
 
   zustand        = AUFWAKEN;
@@ -906,12 +977,12 @@ void setup() {
   kal_g_ruhe_ok = false;
   memset(kal_g_gang, 0, sizeof(kal_g_gang));
   memset(kal_ruhe_summe, 0, sizeof(kal_ruhe_summe));
-  Serial.printf("Einbaulage: %s\n", kalibriert_je ?
+  out("Einbaulage: %s\n", kalibriert_je ?
                 "letzte Kalibrierung (wird beim Gehen erneuert)" :
                 "Montagevorgabe (wird beim Gehen kalibriert)");
 #if TESTMODUS
-  Serial.println("TESTMODUS: Ausgabe jeder Inferenz, kein Tiefschlaf");
-  Serial.println("Format: T,<ms>,<Sturz %>,<Stimmen von 5>");
+  outln("TESTMODUS: Ausgabe jeder Inferenz, kein Tiefschlaf");
+  outln("Format: T,<ms>,<Sturz %>,<Stimmen von 5>");
 #endif
   letzteBewegung = millis();
   memset(vote_puffer, 0, sizeof(vote_puffer));
@@ -926,6 +997,20 @@ void loop() {
   static uint32_t letzteBatterie  = 0;
   uint32_t jetzt = millis();
 
+  while (Serial.available()) befehl(Serial.read());
+  while (ble_ende != ble_kopf) {
+    char c = ble_puffer[ble_ende];
+    ble_ende = (ble_ende + 1) % sizeof(ble_puffer);
+    befehl(c);
+  }
+#ifdef NACH_STURZ_AUF_R_WARTEN
+  static uint32_t letzterHinweis = 0;
+  if (warte_auf_r && jetzt - letzterHinweis > 5000) {
+    letzterHinweis = jetzt;
+    outln("Sturz erkannt -- zum Weitermachen R senden");
+  }
+#endif
+
   if (jetzt >= naechsteMessung) {
     naechsteMessung = jetzt + 10;        // 100 Hz
 
@@ -938,7 +1023,7 @@ void loop() {
       if ((kal_gyro_n >= KALIB_PROBEN && schritte >= SCHRITTE_START) ||
           schritte >= KALIB_MAX_SCHRITTE) {
         if (!kalibBerechnen())
-          Serial.println("Kalibrierung: Rueckfall auf vorherige Einbaulage");
+          outln("Kalibrierung: Rueckfall auf vorherige Einbaulage");
         kalib_fertig = true;
         ring_fuell = 0;                    // Fenster mit neuer Lage fuellen
       }
@@ -950,7 +1035,7 @@ void loop() {
 
     if (zustand == AUFWAKEN && kalib_fertig && schritte >= SCHRITTE_START) {
       zustand = AKTIV;
-      Serial.printf("%lu Schritte, Einbaulage kalibriert -> Inferenz aktiv\n",
+      out("%lu Schritte, Einbaulage kalibriert -> Inferenz aktiv\n",
                     (unsigned long)schritte);
     }
 
@@ -976,7 +1061,7 @@ void loop() {
       dezim_zaehler = 0;
       seit_inferenz++;
 
-      if (zustand == AKTIV && modellBereit &&
+      if (zustand == AKTIV && modellBereit && !warte_auf_r &&
           ring_fuell >= FENSTER_LEN &&
           seit_inferenz >= INFERENZ_INTERVALL) {
         seit_inferenz = 0;
@@ -1007,7 +1092,7 @@ void loop() {
           const char *urteil = alarm ? "STURZ!" :
                                lage_aktiv ? "nach Alarm: Lage wird geprueft" :
                                (p >= VOTE_SCHWELLE) ? "Verdacht" : "kein Sturz";
-          Serial.printf("LIVE  Sturz %3d%%  [%s]  Stimmen %d/%d  %s\n",
+          out("LIVE  Sturz %3d%%  [%s]  Stimmen %d/%d  %s\n",
                         (int)lroundf(p * 100.0f), balken, stimmen, VOTE_M, urteil);
         }
         (void)dauer;
@@ -1016,7 +1101,7 @@ void loop() {
         static float p_max = 0;
         if (p > p_max) p_max = p;
         if (++zaehler % 50 == 0) {           // alle 10 s eine Zeile
-          Serial.printf("p=%.3f  max der letzten 10 s=%.3f  Inferenz %lu us  Schritte %lu\n",
+          out("p=%.3f  max der letzten 10 s=%.3f  Inferenz %lu us  Schritte %lu\n",
                         p, p_max, (unsigned long)dauer,
                         (unsigned long)schritte);
           p_max = 0;
@@ -1027,6 +1112,10 @@ void loop() {
           bleAlarmSenden(p);
           memset(vote_puffer, 0, sizeof(vote_puffer));
           lageStarten(jetzt);
+#ifdef NACH_STURZ_AUF_R_WARTEN
+          warte_auf_r = true;
+          outln("Sturz erkannt -- Auswertung angehalten, zum Weitermachen R senden");
+#endif
         }
       }
     }
@@ -1042,6 +1131,6 @@ void loop() {
   }
 
 #if !TESTMODUS
-  if (jetzt - letzteBewegung > RUHE_BIS_SCHLAF_MS && !lage_aktiv) schlafenGehen();
+  if (jetzt - letzteBewegung > RUHE_BIS_SCHLAF_MS && !lage_aktiv && !warte_auf_r) schlafenGehen();
 #endif
 }

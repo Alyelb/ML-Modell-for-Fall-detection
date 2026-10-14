@@ -119,6 +119,15 @@ während der Lageprüfung (bis 15 s) wird kein neuer ausgelöst. Mit
 `LIVE_AUSGABE 0` erscheint stattdessen alle 10 s eine Zusammenfassung
 (`p` = letzter Wert, `max der letzten 10 s` = höchster Wert seitdem).
 
+**Handy statt USB:** Die App *Serial Bluetooth Terminal* (wie beim
+DatenLogger) verbindet sich mit `CleverSole` über den Nordic UART
+Service und zeigt dieselben Zeilen wie der serielle Monitor.
+
+**Nach Sturz anhalten (optional):** In `CleverSole.ino` die Zeile
+`// #define NACH_STURZ_AUF_R_WARTEN` einkommentieren. Dann hält die
+Auswertung nach jedem Alarm an, bis `R` gesendet wird (seriell oder aus
+der App); bis dahin schläft das Board nicht ein.
+
 **Kalibrierung:** Standard ist jetzt `KALIB_RICHTUNG_AUTO 0`: Hochachse
 und Neigung aus der Schwerkraft, „vorn“ aus dem X-Pfeil. Weicht die aus
 dem Gang bestimmte Querachse mehr als 45° davon ab (z. B. Modul in der
