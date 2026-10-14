@@ -2812,20 +2812,43 @@ Einbau: IMU-Modul flach unter der Ferse, Chip oben, aufgedruckter
 X-Pfeil zu den Zehen ($x' = x$, $y' = -z$, $z' = y$). Da die Lage in
 einer Sohle nie exakt ist, kalibriert die Firmware sie nach jedem
 Aufwachen selbst: Schwerkraft im Stand (oben), Hauptdrehachse beim
-Gehen (quer), Schiefe der Drehrate in der Schwungphase (vorn).
+Gehen (quer), aufgedruckter X-Pfeil (vorn). Die Vorwärtsrichtung allein
+aus der Schiefe der Drehrate zu bestimmen, erwies sich an der Sohle als
+unzuverlässig (Abweichungen bis $180^{\circ}$); weicht die Lage um mehr
+als $45^{\circ}$ von der Vorgabe ab, wird nur die Neigung korrigiert.
 
-Auf dem ESP32-C6 lieferte das Modell zunächst konstant
+Auf dem ESP32-C6 lieferte das Modell mit TensorFlow Lite Micro konstant
 $p \approx 0{,}47$, unabhängig vom Eingang, während dieselbe Datei am
-PC korrekt rechnete. Ursache waren MUL/ADD-Operationen mit Broadcast
-aus der Batch-Normalisierung, die TFLite Micro dort falsch auswertet.
-Das Exportskript rechnet die Normalisierung nun in die folgende Faltung
-bzw.\ Dense-Schicht ein (Abweichung $< 10^{-5}$); es bleiben
-7~Operatoren, $76{,}7$\,KB. int8- und Gleitkommamodell treffen auf den
+PC korrekt rechnete. Vermutet wurden zunächst die MUL/ADD-Operationen
+mit Broadcast aus der Batch-Normalisierung. Das Exportskript rechnet die
+Normalisierung deshalb in die folgende Faltung bzw.\ Dense-Schicht ein
+(Abweichung $< 10^{-5}$; es bleiben 7~Operatoren, $76{,}7$\,KB) -- die
+Ausgabe blieb aber konstant. Die Firmware rechnet das Netz daher mit
+eigenen int8-Kernen (\texttt{netz\_int8.h}, rund 130 Zeilen C), die die
+Festkomma-Arithmetik der TensorFlow-Lite-Referenzkerne nachbilden
+(Kanal-Multiplikatoren, Rundung, Nullpunkte). Das Exportskript schreibt
+die Gewichte als C-Arrays (\texttt{modell\_netz.h}), kompiliert die
+Kerne am PC und vergleicht jede Schicht mit dem TensorFlow-Lite-Interpreter:
+Faltungen und Dense-Schichten sind bitgleich, der Mittelwert weicht um
+höchstens eine int8-Stufe ab, die Entscheidungen stimmen in allen
+Fenstern überein. int8- und Gleitkommamodell treffen auf den
 Pilotfenstern in $99{,}5\,\%$ der Fälle dieselbe Entscheidung. Ein
 Selbsttest mit fünf festen Eingaben prüft beim Start, dass der Chip
-dasselbe rechnet wie der Konverter. Wie gut das Modell Stürze in der
-Sohle erkennt, ist noch nicht gemessen, sondern aus der Knöchelposition
-übertragen.
+dasselbe rechnet wie am PC. Auf dem Chip benötigt ein Fenster rund
+$117$\,ms, gut die Hälfte des $200$-ms-Takts.
+
+\textbf{Funktionstest in der Sohle.} Mit dem Prototyp in der Sohle
+(eine Person, qualitativ) erreichen beim Gehen einzelne Fenster
+$p = 0{,}85$ bis $0{,}94$, lösen wegen der 3-von-5-Regel aber keinen
+Alarm aus; simulierte Stürze lösten einen Alarm aus, die Lageprüfung
+meldete danach z.\,B.\ \glqq vorwärts $95\,\%$\grqq. Ohne Sperre löste ein
+Sturz mehrere Alarme aus, da die Abstimmung nach jedem Alarm neu
+beginnt; seitdem ist der Alarm während der Lageprüfung ($15$\,s)
+gesperrt. Eine Live-Anzeige gibt alle $0{,}2$\,s Sturz-Wert, Stimmen
+und Urteil seriell und über den Nordic UART Service aus (App
+\emph{Serial Bluetooth Terminal}). Erkennungs- und Fehlalarmraten in
+der Sohle sind damit nicht gemessen, sondern weiterhin aus der
+Knöchelposition übertragen.
 
 %------------------------------------------------------------------
 \section{Einfluss der Sensororientierung}
@@ -3015,8 +3038,10 @@ Kein Sturz übertrifft die stärkste Alltagsbewegung; der Vorwärtssturz
 rechts liegt sogar unter normalem Gehen (über $4$\,g). An der Sohle kann
 ein Grenzwert auf die Spitze daher grundsätzlich nicht trennen, und die
 bisherige Partner-Sohle ($\pm 2$\,g je Achse, höchstens $3{,}5$\,g als
-Betrag) kann schon das Gehen nicht vollständig messen. Die Auswertung
-dieser Aufnahmen mit dem Modell steht noch aus.
+Betrag) kann schon das Gehen nicht vollständig messen. Eine
+systematische Auswertung dieser Aufnahmen mit dem Modell steht noch
+aus; den Funktionstest auf dem Chip beschreibt
+Abschnitt~\ref{sec:fuss_pilot}.
 
 %------------------------------------------------------------------
 \section{Zwischenfazit}
@@ -3061,8 +3086,9 @@ Offen bleibt, wie gut das Modell Stürze \emph{in der Sohle} erkennt:
 Das Modell auf dem Prototyp (B2r) wurde ohne Sohlenstürze trainiert,
 der Pilotversuch misst an Hüfte und Knöchel und stammt von einer
 einzigen Person; die eigenen Sohlenaufnahmen
-(Abschnitt~\ref{sec:fuss_sohle}) sind noch nicht mit dem Modell
-ausgewertet. Eine belastbare Antwort erfordert Aufnahmen mehrerer
+(Abschnitt~\ref{sec:fuss_sohle}) sind mit dem Modell bislang nur
+qualitativ im Funktionstest erprobt. Das für den Partner vorbereitete
+kommerzielle Modell (Notebook~05, Teil~E) wurde nicht mehr trainiert. Eine belastbare Antwort erfordert Aufnahmen mehrerer
 Personen mit dem Sensor in der Sohle.
 
 %------------------------------------------------------------------

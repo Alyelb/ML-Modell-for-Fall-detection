@@ -108,7 +108,8 @@ SisFall hebt die Erkennung von $2$ auf $15$ von $22$ Stürzen.
 Eine Rotationsaugmentierung macht das Modell signifikant robuster. Auf
 dem eigenen Prototyp erkennt das Modell nach Ausrichtung über die
 Schwerkraft -- wie in der Firmware -- alle $67$ Stürze einer Person an
-Hüfte und Knöcheln. Alle Aussagen sind subjektunabhängig
+Hüfte und Knöcheln; in der Sohle läuft es mit eigenen int8-Kernen
+in Echtzeit. Alle Aussagen sind subjektunabhängig
 kreuzvalidiert und, wo möglich, gepaart statistisch abgesichert.
 
 \vspace{0.3cm}
@@ -355,59 +356,68 @@ gespiegelte Kopie je Fenster).}
 Der Code liegt in einer gemeinsamen Bibliothek (\texttt{fall\_lib.py})
 und fünf Colab-Notebooks: (01) Basismodell, (02) Transfer, Fehlalarme,
 Zielgruppe, (03) progressives Training, (04) Fuß und Orientierung,
-(05) Pilotdaten und kommerzielles Modell.
+(05) Pilotdaten (Teil~E: kommerzielles Modell, vorbereitet).
 
 \section{Firmware}
 Die Firmware ist für die Einlegesohle ausgelegt. Sie liest die IMU mit
 $100$\,Hz, tastet auf $50$\,Hz herunter, hält einen Ringpuffer von $2$\,s
-und führt alle $200$\,ms eine Inferenz mit TensorFlow Lite Micro aus
-(int8, $77$\,KB, 7 Operatoren). Eine 3-von-5-Regel entscheidet über den
-Alarm, der per BLE gemeldet wird. Eingesetzt wird B2r, da es gegenüber
-Drehungen am robustesten ist (Abschnitt~\ref{sec:orient}); int8 und
-Gleitkommamodell treffen auf den Pilotfenstern in $99{,}5\,\%$ der Fälle
-dieselbe Entscheidung.
+und wertet alle $200$\,ms das int8-Modell aus ($77$\,KB, gemessen
+$\approx 117$\,ms je Fenster). Eine 3-von-5-Regel entscheidet über den
+Alarm, der per BLE gemeldet wird; je Sturz wird genau ein Alarm
+ausgelöst. Eingesetzt wird B2r, da es gegenüber Drehungen am
+robustesten ist (Abschnitt~\ref{sec:orient}); int8 und Gleitkommamodell
+treffen auf den Pilotfenstern in $99{,}5\,\%$ der Fälle dieselbe
+Entscheidung.
 
-\textbf{Batch-Normalisierung und Selbsttest.} Auf dem ESP32-C6 lieferte
-das Modell zunächst unabhängig vom Eingang konstant $p \approx 0{,}47$,
-während dieselbe Datei am PC korrekt rechnete. Ursache waren die aus der
-Batch-Normalisierung entstehenden MUL/ADD-Operationen mit Broadcast, die
-TFLite Micro dort falsch auswertet. Das Exportskript rechnet die
-Normalisierung deshalb in die jeweils folgende Faltungs- bzw.
-Dense-Schicht ein (maximale Abweichung $< 10^{-5}$) und legt fünf
-Selbsttest-Muster samt Sollausgabe ab, die die Firmware beim Start
-nachrechnet.
+\textbf{Eigene int8-Kerne statt TensorFlow Lite Micro.} Mit TensorFlow
+Lite Micro lieferte das Modell auf dem ESP32-C6 unabhängig vom Eingang
+konstant $p \approx 0{,}47$, während dieselbe Datei am PC korrekt
+rechnete. Auch nach dem Einrechnen der Batch-Normalisierung in die
+folgende Schicht (maximale Abweichung $< 10^{-5}$) blieb der Fehler.
+Die Firmware rechnet das Netz deshalb mit eigenen, rund 130 Zeilen
+langen int8-Kernen (Faltung, Max-Pooling, Mittelwert, Dense), die die
+Festkomma-Arithmetik der TensorFlow-Lite-Referenz nachbilden. Das
+Exportskript erzeugt daraus die Gewichtsdatei, kompiliert die Kerne am
+PC und vergleicht sie mit dem TensorFlow-Lite-Interpreter: Faltungen und
+Dense-Schichten sind bitgleich, der Mittelwert weicht höchstens um eine
+int8-Stufe ab, die Entscheidungen stimmen in allen Fenstern überein.
+Beim Start rechnet die Firmware fünf Selbsttest-Muster nach.
 
 \textbf{Selbstkalibrierung der Einbaulage.} Vorgabe ist: IMU-Modul flach
 unter der Ferse, Chip oben, aufgedruckter X-Pfeil zu den Zehen. Da die
 Lage in einer Sohle nie exakt ist, bestimmt die Firmware sie nach jedem
 Aufwachen selbst: Die Schwerkraft im Stillstand liefert die Hochachse,
 die Hauptdrehachse der Winkelgeschwindigkeit beim Gehen die Querachse,
-und die Schiefe der Drehrate um diese Achse (die Schwungphase erzeugt die
-größten Spitzen) legt fest, wo vorn ist. Daraus folgt die Drehung in den
+und der aufgedruckte X-Pfeil legt fest, wo vorn ist (die Richtung aus
+den Gangdaten allein erwies sich an der Sohle als unzuverlässig). Weicht
+die so bestimmte Lage um mehr als $45^{\circ}$ von der Vorgabe ab, wird
+nur die Neigung korrigiert. Daraus folgt die Drehung in den
 Trainingsrahmen ($x'$ vorwärts, $y'$ abwärts, $z'$ links). Auf den
 Knöchelaufnahmen, rechnerisch in beliebige Lagen gedreht, stellte das
 Verfahren die Achsen in allen Fällen richtig wieder her
 (Vorwärtsstürze danach $x' = -0{,}89$ bis $-1{,}0$); an der Sohle ist es
-noch zu bestätigen.
+im Betrieb bestätigt (Abschnitt~\ref{sec:betrieb}).
 
 \textbf{Sturzrichtung und Testmodus.} Nach einem Alarm wertet die
 Firmware die erste Ruhephase aus und meldet die Lage als Schätzung
 (Bauchlage $\approx$ vorwärts, Rückenlage $\approx$ rückwärts, seitlich).
 Das Modell selbst unterscheidet nur Sturz und Nicht-Sturz; seine Ausgabe
-$p$ ist kein kalibrierter Wahrscheinlichkeitswert. Ein Testmodus sendet
-jede Modellausgabe über BLE, um Versuche auszuwerten.
+$p$ ist kein kalibrierter Wahrscheinlichkeitswert. Eine Live-Anzeige
+gibt alle $0{,}2$\,s Sturz-Wert, Stimmen und Urteil aus, seriell und
+über den Nordic UART Service (z.\,B.\ App \emph{Serial Bluetooth
+Terminal}). Wahlweise hält die Auswertung nach einem Alarm an, bis
+\texttt{R} gesendet wird.
 
 \section{Kommerzielles Modell}
-Für den Projektpartner wird ein zweites Modell nur aus Daten trainiert,
-deren Lizenz eine kommerzielle Nutzung nicht ausschließt:
-\textbf{alle Datensätze außer Smart-Insole und MobiAct}. Es wird von
-Grund auf auf einem gemischten Pool aller Positionen vortrainiert
-(SisFall, KFall, UMAFall, FallAllD, WEDA-FALL, CAPPIMU ohne Schienbein;
-orientierungsaugmentiert), dann wie B2r auf Schienbein und ImbalanSense
-nachtrainiert und abschließend um die eigenen Pilotaufnahmen ergänzt.
-Der Unterschied zum Berichtsmodell B2r prüft die Behauptung, dass
-breiteres Vortraining dem Fußmodell nützt (Abschnitt~\ref{sec:kommerz}).
-Die Lizenzen sind vor der Übergabe im Einzelnen zu prüfen.
+Für den Projektpartner ist ein zweites Modell vorbereitet, das nur Daten
+verwendet, deren Lizenz eine kommerzielle Nutzung nicht ausschließt
+(\textbf{alle Datensätze außer Smart-Insole und MobiAct}): Vortraining
+auf einem gemischten, orientierungsaugmentierten Pool aller Positionen,
+danach wie B2r auf Schienbein und ImbalanSense, zuletzt um die eigenen
+Pilotaufnahmen ergänzt (Notebook~05, Teil~E). Dieser Lauf wurde im
+Projektzeitraum nicht mehr ausgeführt; die Ergebnisse dieses Berichts
+beziehen sich alle auf B2r. Die Lizenzen sind vor einer Übergabe im
+Einzelnen zu prüfen.
 
 %==================================================================
 \chapter{Ergebnisse und Diskussion}
@@ -769,28 +779,24 @@ $2{,}3$--$5{,}4$\,g; links Springen $7{,}7$\,g, die Stürze
 $3{,}5$--$5{,}7$\,g. Normales Gehen erreicht an der Sohle über $4$\,g und
 damit mehr, als die bisherige Partner-Sohle ($\pm 2$\,g je Achse,
 höchstens $3{,}5$\,g als Betrag) messen kann. Die Aufnahmen bestätigen
-damit an der Zielposition, dass nur die zeitliche Form trennt; ihre
-Auswertung mit dem Modell steht noch aus.
+damit an der Zielposition, dass nur die zeitliche Form trennt. Einen
+ersten Funktionstest des Modells darauf beschreibt
+Abschnitt~\ref{sec:betrieb}.
 
-\section{Kommerzielles Modell}
-\label{sec:kommerz}
-\begin{table}[H]
-\centering\small
-\caption{Kommerzielles Modell (ohne Smart-Insole und MobiAct) gegenüber
-B2r auf identischen Falten. Smart-Insole und Pilotdaten sind für beide
-extern.}
-\label{tab:kommerz}
-\begin{tabularx}{\textwidth}{Y c c c c c}
-\toprule
-\textbf{Modell} & \textbf{Se} & \textbf{Se gedreht} & \textbf{FP/h IMB} & \textbf{FP/h SI} & \textbf{Pilot Knöchel Se} \\
-\midrule
-B2r (Bericht)        & \offen{} & \offen{} & \offen{} & \offen{} & \offen{} \\
-Kommerziell          & \offen{} & \offen{} & \offen{} & \offen{} & \offen{} \\
-\bottomrule
-\end{tabularx}
-\end{table}
-\offen{Einordnung nach dem Lauf von Notebook~05, Teil~E: gesicherter
-Unterschied ja/nein, in welche Richtung.}
+\section{Funktionstest in der Sohle}
+\label{sec:betrieb}
+Zum Abschluss lief die Firmware mit B2r im Prototyp in der Sohle (eine
+Person, qualitativer Test). Die Selbsttests stimmen, jedes Fenster
+benötigt rund $115$--$117$\,ms und damit gut die Hälfte des
+$200$-ms-Takts. Beim Gehen erreichen einzelne Fenster $p = 0{,}85$ bis
+$0{,}94$, lösen aber wegen der 3-von-5-Regel keinen Alarm aus. Simulierte
+Stürze lösten einen Alarm aus; die anschließende Lageprüfung meldete
+z.\,B.\ \glqq vorwärts $95\,\%$\grqq. Ohne Sperre löste ein Sturz
+mehrere Alarme nacheinander aus, weil die Abstimmung nach jedem Alarm
+neu beginnt; seitdem ist der Alarm während der Lageprüfung gesperrt.
+Die zweite Stufe (Lage und Ruhe) bestätigte nicht jeden Sturz, da nach
+den Versuchen nicht immer lange genug still gelegen wurde. Eine
+Auswertung mit Raten je Stunde steht aus.
 
 \section{Übersicht der geprüften Behauptungen}
 \begin{table}[H]
@@ -818,15 +824,18 @@ Augmentierung kostet Sensitivität & \nein & Se $+0{,}8$\,pp (n.\,s.), gedreht $
 Das Basismodell scheitert an der eigenen Hüfte wegen der Hardware & \nein & Achsen wie SisFall: $2 \rightarrow 15$ von 22 \\
 Spitzenwerte trennen Stürze am Fuß & \nein & Knöchel: Alltag bis $10{,}7$\,g; Sohle: Stürze $\leq 5{,}7$\,g, Joggen/Springen bis $7{,}7$\,g \\
 Smart-Insole im Training senkt Fehlalarme weiter & \teils & $28 \rightarrow 11$/h, aber Se $-2{,}0$\,pp (gesichert) \\
-Breiteres Vortraining verbessert das Fußmodell & \offen{} & Notebook 05, Teil E \\
+TFLite Micro rechnet das Modell auf dem ESP32-C6 korrekt & \nein & konstant $p \approx 0{,}47$; eigene int8-Kerne entscheiden wie TFLite \\
+Breiteres Vortraining verbessert das Fußmodell & -- & nicht geprüft (Notebook 05, Teil E vorbereitet) \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \section{Einschränkungen}
 Eigene Sohlenaufnahmen mit Stürzen liegen erst seit Projektende vor
-und sind mit dem Modell noch nicht ausgewertet; das Firmwaremodell ist
-an der Sohle daher nicht validiert, sondern vom Knöchel übertragen. Die
+und sind mit dem Modell nur im qualitativen Funktionstest erprobt
+(Abschnitt~\ref{sec:betrieb}); Erkennungs- und Fehlalarmraten an der
+Sohle sind daher nicht belegt, das Modell ist vom Knöchel übertragen.
+Das kommerzielle Modell wurde nicht trainiert. Die
 Pilotdaten stammen von einer Person und enthalten nur Minuten Alltag.
 Alle Stürze sind simuliert, von überwiegend jungen Personen. Die
 Aufprallbeschriftung von CAPPIMU ist eine Näherung.
@@ -837,7 +846,9 @@ Aufprallbeschriftung von CAPPIMU ist eine Näherung.
 %==================================================================
 Eine Sturzerkennung in der Einlegesohle ist mit einer 6-Achsen-IMU und
 einem kleinen 1D-CNN auf dem ESP32-C6 umsetzbar; das Modell benötigt
-rund $77$\,KB und rechnet alle $200$\,ms. Die wesentlichen Erkenntnisse:
+rund $77$\,KB und rechnet alle $200$\,ms in rund $117$\,ms mit eigenen
+int8-Kernen, da TensorFlow Lite Micro auf dem ESP32-C6 keine korrekten
+Ausgaben lieferte. Die wesentlichen Erkenntnisse:
 
 \begin{enumerate}\setlength\itemsep{1pt}
 \item \textbf{Am Fuß sind Fehlalarme das Kernproblem}, nicht die
@@ -866,8 +877,9 @@ ergänzen, um das Modell an der Zielposition zu validieren. (2) Zweite Stufe mit
 Lageänderung und Liegephase zur Bestätigung eines Alarms und
 Langliegeerkennung. (3) Parameter der Alarmlogik ($N$, $M$, Schwelle)
 auf Sohlendaten festlegen. (4) Energiebedarf im Dauerbetrieb messen.
-(5) Für NEARBY (vormals Clever-Sole) das kommerzielle Modell nach
-Prüfung der Lizenzen übergeben.
+(5) Für NEARBY (vormals Clever-Sole) das vorbereitete kommerzielle
+Modell trainieren, gegen B2r prüfen und nach Prüfung der Lizenzen
+übergeben.
 
 \bibliography{references}
 
