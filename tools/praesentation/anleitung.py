@@ -62,7 +62,7 @@ T(s, 0.47, 1.9, 6.0, 0.4, [[("Sohle in Betrieb nehmen", {"bold": True, "color": 
 d.ablauf(s, 0.47, 2.4, 12.3, [("1 Verdrahten", "fünf Leitungen"), ("2 Einbauen", "Modul unter\ndie Ferse"),
                               ("3 Prüfen", "vor dem\nFestkleben"), ("4 Arduino", "IDE ein-\nrichten"),
                               ("5 Hochladen", "Selbsttest"), ("6 Kalibrieren", "stehen,\ngehen"),
-                              ("7 App", "nRF Connect")], h=1.3, size=15)
+                              ("7 App", "live mitlesen,\nAlarm")], h=1.3, size=15)
 T(s, 0.47, 4.15, 6.0, 0.4, [[("Neues Modell (nur bei Bedarf)", {"bold": True, "color": GRUEN})]], size=17)
 d.ablauf(s, 0.47, 4.65, 4.0, [("8 Trainieren", "Colab"), ("9 Exportieren", "Python")], h=1.3, size=15)
 T(s, 5.0, 4.7, 7.75, 2.0, [
@@ -161,7 +161,7 @@ T(s, 0.47, 1.95, 5.6, 4.8, [
     "Port wählen, Hochladen, seriellen Monitor mit 115200 Baud öffnen.",
     "Beim Start rechnet der Chip fünf feste Eingaben und vergleicht sie mit den Werten vom PC.",
     [("Alle fünf Zeilen OK: ", {"bold": True}), ("Der Chip rechnet richtig.", {})],
-    [("Danach im Betrieb: ", {"bold": True}), ("alle 10 s eine Zeile. Beim Gehen bleibt p nahe 0, bei einem Sturz steigt es.", {})],
+    [("Danach im Betrieb: ", {"bold": True}), ("alle 0,2 s eine LIVE-Zeile: Sturz-Wert, Stimmen der letzten fünf Fenster, Urteil.", {})],
 ], size=16, punkte=True, abstand=10)
 code(s, 6.4, 1.95, 6.35, [
     "Sensor: MPU-6500 (WHO_AM_I = 0x70)",
@@ -171,11 +171,12 @@ code(s, 6.4, 1.95, 6.35, [
     "Selbsttest 2: alle=  10  p=0.057  soll=0.059  OK",
     "Selbsttest 3: alle=  13  p=0.866  soll=0.867  OK",
     "Selbsttest 4: alle= -13  p=0.718  soll=0.719  OK",
-    "Modell (eigene Kerne) ok",
-    "...",
-    "p=0.002  max der letzten 10 s=0.031",
-], size=11)
-N(s, "Die Sollwerte schreibt das Exportskript in modell_sohle.h. Ein Wert, der sich über Minuten nicht ändert, ist ein Fehler.")
+    "Modell (eigene Kerne) ok, 117000 us je Fenster",
+    "LIVE  Sturz   2%  [..........]  Stimmen 0/5  kein Sturz",
+    "LIVE  Sturz  91%  [#########.]  Stimmen 1/5  Verdacht",
+    "LIVE  Sturz  97%  [##########]  Stimmen 3/5  STURZ!",
+], size=10)
+N(s, "Die Sollwerte schreibt das Exportskript in modell_sohle.h. Verdacht erscheint beim ersten Fenster über 50 %, STURZ! bei drei von fünf (nach 0,4–0,8 s). Ein Wert, der sich über Minuten nicht ändert, ist ein Fehler.")
 
 # 9 ------------------------------------------------------------ Kalibrieren
 s = d.folie("Schritt 6: Kalibrieren – einmal stehen, einmal gehen")
@@ -194,14 +195,14 @@ T(s, 0.47, 4.75, 12.3, 2.0, [
 N(s, "Genau diese Ausrichtung über die Schwerkraft wurde auf den Pilotdaten geprüft: alle 67 Stürze erkannt.")
 
 # 10 ------------------------------------------------------------ App
-s = d.folie("Schritt 7: Die Meldung in der App ansehen")
+s = d.folie("Schritt 7: Live mitlesen und Alarme in der App")
 schritt(s, 7)
 T(s, 0.47, 1.95, 5.6, 4.8, [
-    "nRF Connect öffnen, SCAN, bei CleverSole-01 auf CONNECT.",
-    "Den Dienst „Unknown Service“ mit FFF0 aufklappen.",
-    "Bei FFF1 und FFF2 auf das Symbol mit den drei Pfeilen tippen – damit kommen Meldungen von selbst.",
+    [("Live mitlesen: ", {"bold": True}), ("App „Serial Bluetooth Terminal“ → Devices → Bluetooth LE → CleverSole-01. "
+                                          "Es erscheinen dieselben Zeilen wie am USB; R sendet „weiter“.", {})],
+    [("Alarme: ", {"bold": True}), ("nRF Connect → CleverSole-01 → Dienst FFF0; bei FFF1 und FFF2 die drei Pfeile antippen.", {})],
     "Batterie: Dienst 180F, Wert in Prozent.",
-], size=16, punkte=True, abstand=10)
+], size=15, punkte=True, abstand=10)
 code(s, 6.4, 1.95, 6.35, ["FFF1  STURZ 93% n=3 batt=87", "      ... Person liegt still ...",
                           "FFF2  LAGE vorwaerts 92%", "FFF2  STUFE2 bestaetigt"], size=14)
 d.tabelle(s, 6.4, 3.45, 6.35, [
@@ -214,16 +215,20 @@ d.tabelle(s, 6.4, 3.45, 6.35, [
 N(s, "Links und rechts werden als seitlich zusammengefasst, weil das Vorzeichen zwischen den Füßen nicht verlässlich ist.")
 
 # 11 ------------------------------------------------------------ Testmodus
-s = d.folie("Für Versuche: der Testmodus")
-code(s, 0.47, 1.95, 5.6, ["#define TESTMODUS 1", "", "T,812345,4,0", "T,812545,71,1", "T,812745,96,2", "T,812945,94,3"],
-     size=15)
+s = d.folie("Für Versuche: Schalter in CleverSole.ino")
+d.tabelle(s, 0.47, 1.95, 5.6, [
+    ["Schalter", "Wirkung"],
+    ["LIVE_AUSGABE 1", "jede Entscheidung als LIVE-Zeile (Standard)"],
+    ["NACH_STURZ_AUF_\nR_WARTEN", "nach Alarm anhalten bis R; Zeile einkommentieren"],
+    ["TESTMODUS 1", "Zeilen T,Zeit,Sturz %,Stimmen; kein Schlaf"],
+], [2.4, 3.2], size=13, h_zeile=0.62, zentriert_ab=3)
 T(s, 6.4, 1.95, 6.35, 4.8, [
-    "Jede Entscheidung wird alle 0,2 s gesendet: Zeit in ms, Sturz-Wert in %, Stimmen von 5.",
-    "Das Gerät schläft nicht ein.",
-    "Mitschnitt im seriellen Monitor oder in nRF Connect (FFF2), Uhrzeit jeder Aktivität notieren.",
+    "Jede Entscheidung kommt alle 0,2 s, seriell und über Bluetooth.",
+    "Mit R-Warten bleibt die Sohle nach einem Sturz stehen, bis man R sendet – praktisch, wenn man nach dem Sturz liegen bleibt.",
+    "Mitschnitt im seriellen Monitor oder in Serial Bluetooth Terminal, Uhrzeit jeder Aktivität notieren.",
     [("Auswerten: ", {"bold": True}), ("erkannte ÷ ausgeführte Stürze = Sensitivität; Alarme im Alltag ÷ Stunden = Fehlalarme je Stunde.", {})],
 ], size=16, punkte=True, abstand=10)
-N(s, "Die Beispielzeilen sind ausgedacht und zeigen nur das Format. Im Einsatz TESTMODUS wieder auf 0.")
+N(s, "Im Einsatz TESTMODUS auf 0 und R-Warten auskommentiert lassen.")
 
 # 12 ------------------------------------------------------------ Training
 s = d.folie("Schritt 8: Ein neues Modell trainieren (Keras)")
@@ -292,7 +297,7 @@ d.tabelle(s, 0.47, 1.95, 12.3, [
     ["modell.h", "bindet das Modell ein, Einbauvorgabe (Chip oben, X zu den Zehen)", "selten"],
     ["netz_int8.h", "eigene int8-Rechenfunktionen für das Netz", "nein"],
     ["modell_netz.h", "Gewichte für netz_int8.h", "nein – erzeugt"],
-    ["modell_sohle.h", "dasselbe Modell als .tflite und die Selbsttest-Sollwerte", "nein – erzeugt"],
+    ["modell_sohle.h", "Kopie der .tflite (nicht ausgeführt) und Selbsttest-Sollwerte", "nein – erzeugt"],
     ["referenzwerte.h", "Schwellen der zweiten Stufe (Aufprall, Lage, Ruhe)", "ja, nach Sohlen-Messungen"],
     ["ANLEITUNG.md", "diese Anleitung ausführlich", "–"],
 ], [2.6, 6.9, 2.8], size=14, h_zeile=0.56, zentriert_ab=3)
@@ -307,7 +312,7 @@ d.tabelle(s, 0.47, 1.95, 12.3, [
     ["Selbsttest FALSCH", "modell_netz.h passt nicht zu modell_sohle.h", "beide mit dem Exportskript neu erzeugen"],
     ["p bleibt minutenlang gleich", "alte Firmware mit TFLite Micro", "neueste Firmware, EIGENE_KERNE 1"],
     ["Wacht nicht mehr auf", "INT nicht auf GPIO0–7", "INT an D1 (GPIO1) legen"],
-    ["Keine Meldungen in der App", "Benachrichtigung aus", "bei FFF1/FFF2 die drei Pfeile antippen"],
+    ["Keine Meldungen in der App", "Benachrichtigung aus / Classic statt LE", "FFF1/FFF2 Pfeile antippen; Bluetooth LE wählen"],
     ["Viele Fehlalarme", "Modul verdreht oder locker", "Kalibrierungszeile prüfen (Schritt 3)"],
 ], [3.6, 4.2, 4.5], size=14, h_zeile=0.56, zentriert_ab=3)
 N(s, "Die häufigsten Probleme aus dem Projekt.")

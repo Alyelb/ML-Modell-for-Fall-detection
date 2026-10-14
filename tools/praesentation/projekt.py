@@ -182,20 +182,22 @@ etappe(7, "Etappe 7: Die Sohle selbst",
        "An der Sohle kann ein Grenzwert grundsätzlich nicht funktionieren – der Verlauf entscheidet. "
        "Für den Sensor heißt das: ±16 g, 100 Hz, mit Gyroskop.",
        kasten_rechts(["Stürze auf die Knie: harter Boden", "übrige Stürze: weiche Unterlage",
-                      "mit dem Modell noch nicht ausgewertet"], "Zu beachten"),
+                      "eine Person, ohne Rate je Stunde"], "Zu beachten"),
        "Normales Gehen erreicht an der Sohle über 4 g, die bisherige Sohle misst höchstens 3,5 g.")
 
 # 12 ------------------------------------------------------------------ Etappe 8
 etappe(8, "Etappe 8: Das Modell auf den Chip bringen",
        "Modell in ganze Zahlen umgerechnet (int8, 77 KB), Firmware mit Schlafmodus, Schrittzähler, "
-       "Selbstkalibrierung, 3-von-5-Regel, Lageprüfung nach dem Alarm und Bluetooth geschrieben.",
+       "Selbstkalibrierung, 3-von-5-Regel, Lageprüfung, Bluetooth und Live-Anzeige geschrieben.",
        "Auf dem Chip kam zuerst immer derselbe Wert heraus (0,47) – egal, was der Sensor maß. Am PC rechnete "
        "dieselbe Datei richtig. Die Bibliothek TFLite Micro rechnete auf dem ESP32-C6 falsch.",
-       "Ich rechne das Netz jetzt mit eigenen int8-Funktionen, Schicht für Schicht am PC gegen TFLite geprüft. "
-       "Ein Selbsttest beim Start zeigt sofort, ob der Chip richtig rechnet.",
+       "Ich rechne das Netz jetzt mit eigenen int8-Funktionen, Schicht für Schicht am PC gegen TFLite geprüft "
+       "(117 ms je Fenster). Im Test in der Sohle lösen Stürze einen Alarm aus, Gehen nicht.",
        kasten_rechts(["Sensor → 2-s-Fenster", "Lage ausgleichen", "CNN (int8)", "3 von 5 → Lage + Ruhe prüfen",
                       "Bluetooth an die App"], "Kette auf dem Chip"),
-       "Lehre: Ein Modell, das am PC stimmt, ist auf dem Chip noch nicht bewiesen. Deshalb der Selbsttest.")
+       "Lehre: Ein Modell, das am PC stimmt, ist auf dem Chip noch nicht bewiesen. Deshalb der Selbsttest beim Start. "
+       "Beim ersten Test löste ein Sturz mehrere Alarme aus; seitdem ist der Alarm während der Lageprüfung gesperrt. "
+       "Die Live-Zeile (Sturz %, Stimmen, Urteil) kommt alle 0,2 s über USB und über Bluetooth (Serial Bluetooth Terminal).")
 
 # 13 ------------------------------------------------------------------ Ergebnisse 1
 s = d.folie("Ergebnisse I: was die Daten von Bein und Fuß bewirken")
@@ -245,14 +247,14 @@ T(s, 0.47, 1.95, 7.6, 4.9, [
     [("Sensor: ", {"bold": True}), ("6 Achsen, mindestens ±16 g, 100 Hz. Mit ±2 g und 10 Hz ist an der Sohle kein Sturz messbar.", {})],
     [("Einbaulage festlegen ", {"bold": True}), ("und in der Firmware ausgleichen – das kostet nichts und macht den größten Unterschied.", {})],
     [("Stürze an der Sohle aufnehmen: ", {"bold": True}), ("mehrere Personen, harter Boden, beide Füße. Erst dann ist das Modell an der Sohle validiert.", {})],
-    [("Lizenzen prüfen: ", {"bold": True}), ("Smart-Insole und MobiAct sind nur akademisch nutzbar. Das kommerzielle Modell verzichtet darauf.", {})],
+    [("Lizenzen prüfen: ", {"bold": True}), ("Smart-Insole und MobiAct sind nur akademisch nutzbar. Ein Modell ohne diese Daten ist vorbereitet.", {})],
 ], size=17, punkte=True, abstand=14)
 d.flaeche(s, 8.5, 1.95, 4.25, 3.3, fill=HELL)
 T(s, 8.75, 2.15, 3.8, 0.4, [[("Noch offen", {"bold": True, "color": GRAU})]], size=16)
 T(s, 8.75, 2.65, 3.8, 2.5, ["Fehlalarme im Dauerbetrieb über Stunden", "Energiebedarf mit Schlafmodus",
-                            "Zwei Sohlen gemeinsam auswerten", "Ältere Menschen als Testpersonen"],
+                            "Kommerzielles Modell trainieren", "Ältere Menschen als Testpersonen"],
   size=15, punkte=True, abstand=8)
-N(s, "Das kommerzielle Modell wird mit allen Datensätzen außer Smart-Insole und MobiAct trainiert; der Lauf ist angestoßen.")
+N(s, "Das kommerzielle Modell (alle Datensätze außer Smart-Insole und MobiAct) ist in Notebook 05, Teil E vorbereitet, wurde im Projekt aber nicht mehr trainiert. Alle Ergebnisse beziehen sich auf B2r.")
 
 # 17 ------------------------------------------------------------------ Fazit
 s = d.folie("Fazit")

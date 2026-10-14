@@ -176,11 +176,11 @@ N(s, "Die Zahlen in den Kästchen sind ein ausgedachtes Beispiel zur Erklärung,
 # 9 ------------------------------------------------------------ Export
 s = d.folie("Vom Trainingsrechner auf den Mikrocontroller")
 d.ablauf(s, 0.47, 2.05, 12.3, [("Keras-Modell", "Gleitkomma\n≈ 240 KB"), ("Normierung", "in Faltungen\neingerechnet"),
-                               ("int8", "ganze Zahlen\n−128 … 127"), ("TFLite", "77 KB"), ("C-Datei", "modell_sohle.h"),
-                               ("ESP32-C6", "TFLite Micro")], h=1.35, hervor=(2,), size=16)
+                               ("int8", "ganze Zahlen\n−128 … 127"), ("TFLite", "77 KB"), ("C-Datei", "modell_netz.h"),
+                               ("ESP32-C6", "eigene\nint8-Kerne")], h=1.35, hervor=(2,), size=16)
 T(s, 0.47, 3.85, 12.3, 2.9, [
     [("int8 statt Gleitkomma: ", {"bold": True}), ("viermal kleiner und schneller. Auf den eigenen Pilotdaten trifft das int8-Modell in 99,5 % der Fenster dieselbe Entscheidung.", {})],
-    [("Normierung einrechnen: ", {"bold": True}), ("ohne diesen Schritt rechnete der Chip immer 0,47 – unabhängig vom Sensor. Das Exportskript erledigt das jetzt automatisch.", {})],
+    [("Eigene Kerne statt TFLite Micro: ", {"bold": True}), ("mit der Bibliothek rechnete der Chip immer 0,47 – unabhängig vom Sensor. Jetzt rechnen rund 130 Zeilen C dieselben int8-Schritte, am PC gegen TFLite geprüft; 117 ms je Fenster.", {})],
     [("Selbsttest beim Start: ", {"bold": True}), ("fünf feste Eingaben, deren Ergebnis beim Export berechnet wurde. Weicht der Chip ab, stimmt keine spätere Zahl.", {})],
 ], size=16, punkte=True, abstand=10)
 N(s, "Die Schritte macht ein einziges Skript: tools/export_firmware_model.py. Die Details stehen in der Anleitung.")
@@ -193,7 +193,7 @@ d.tabelle(s, 0.47, 1.95, 12.3, [
     ["Schienbein, fremde Personen (CAPPIMU)", "84 % erkannt", "hoch – fünffach kreuzvalidiert"],
     ["Alltag an der Sohle (zwei fremde Datensätze)", "13 bzw. 28 Fehlalarm-Fenster je Stunde", "mittel – vor der 3-von-5-Regel"],
     ["Eigene Hardware, Lage ausgerichtet", "67 von 67 Stürzen", "gering – eine Person, Matte"],
-    ["Echte Stürze in der Sohle", "noch nicht gemessen", "offen"],
+    ["Stürze in der Sohle, auf dem Chip", "Stürze lösen Alarm aus, Gehen nicht", "gering – eine Person, ohne Rate"],
 ], [4.6, 4.2, 3.5], size=15, h_zeile=0.56, zentriert_ab=3)
 T(s, 0.47, 5.6, 12.3, 1.1, [
     [("Kurz: ", {"bold": True}), ("Das Modell erkennt Stürze am Bein zuverlässig. Wie viele Fehlalarme im echten Alltag an der Sohle "
@@ -208,7 +208,7 @@ d.tabelle(s, 0.47, 1.95, 12.3, [
     ["Sensor anders eingebaut", "Erkennung fällt um ein Drittel und mehr", "Selbstkalibrierung, gedrehte Trainingsdaten"],
     ["Keine Daten der Zielposition", "Fersenaufsatz wirkt wie ein Sturz", "Alltagsdaten von der Sohle ins Training"],
     ["Messbereich oder Abtastrate zu klein", "Aufprall wird abgeschnitten oder verschluckt", "±16 g, 100 Hz"],
-    ["Rechenfehler auf dem Chip", "immer derselbe Wert", "Selbsttest beim Start"],
+    ["Rechenfehler auf dem Chip", "immer derselbe Wert (TFLite Micro)", "eigene Kerne, Selbsttest beim Start"],
     ["Nur ein Grenzwert", "Joggen und Springen lösen aus", "CNN + Abstimmung + zweite Stufe"],
 ], [3.8, 4.1, 4.4], size=15, h_zeile=0.62, zentriert_ab=3)
 N(s, "Jede Zeile ist im Projekt tatsächlich aufgetreten.")
