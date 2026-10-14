@@ -102,8 +102,22 @@ Selbsttest 4: alle= -13  p=0.718  soll=0.719  OK
 Modell (eigene Kerne) ok, ... us je Fenster
 ```
 
-Im Betrieb erscheint alle 10 s `p=... max der letzten 10 s=...`. Beim
-Gehen bleibt p nahe 0; ein konstanter Wert über Minuten ist ein Fehler.
+Im Betrieb erscheint mit `LIVE_AUSGABE 1` (Standard) alle 0,2 s eine Zeile:
+
+```
+LIVE  Sturz   2%  [..........]  Stimmen 0/5  kein Sturz
+LIVE  Sturz  91%  [#########.]  Stimmen 1/5  Verdacht
+LIVE  Sturz  97%  [##########]  Stimmen 3/5  STURZ!
+LIVE  Sturz  12%  [#.........]  Stimmen 0/5  nach Alarm: Lage wird geprueft
+```
+
+`Sturz %` ist die Ausgabe des Netzes für die letzten 2 s (keine echte
+Wahrscheinlichkeit), `Stimmen` die Fenster über 50 % unter den letzten
+fünf. *Verdacht* erscheint sofort beim ersten Fenster über 50 %, der
+Alarm bei 3 von 5 (nach 0,4–0,8 s). Pro Sturz gibt es genau einen Alarm;
+während der Lageprüfung (bis 15 s) wird kein neuer ausgelöst. Mit
+`LIVE_AUSGABE 0` erscheint stattdessen alle 10 s eine Zusammenfassung
+(`p` = letzter Wert, `max der letzten 10 s` = höchster Wert seitdem).
 
 **Kalibrierung:** Standard ist jetzt `KALIB_RICHTUNG_AUTO 0`: Hochachse
 und Neigung aus der Schwerkraft, „vorn“ aus dem X-Pfeil. Weicht die aus

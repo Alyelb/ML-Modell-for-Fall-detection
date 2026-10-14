@@ -42,6 +42,11 @@
 // ausgeben und keinen Tiefschlaf -- fuer Versuche. Im Einsatz 0.
 #define TESTMODUS           0
 
+// Live-Anzeige im seriellen Monitor: 1 = jede Entscheidung (alle 0,2 s)
+// als Zeile "LIVE  Sturz 3%  [..........]  Stimmen 0/5  kein Sturz",
+// 0 = nur alle 10 s eine Zusammenfassung.
+#define LIVE_AUSGABE        1
+
 // Kalibrierung der Einbaulage (siehe Abschnitt KALIBRIERUNG)
 #define KALIB_AUTO          1       // 0 = nur Montagevorgabe aus modell.h
 #define KALIB_RICHTUNG_AUTO 0       // 1 = Vorwaertsrichtung aus dem Gang (unsicher);
@@ -980,14 +985,32 @@ void loop() {
         uint32_t dauer = micros() - t0;
 
         bool alarm = (p >= 0) && votingAusloesen(p);
-#if TESTMODUS
-        (void)dauer;
         int stimmen = 0;
         for (int i = 0; i < VOTE_M; i++) stimmen += vote_puffer[i];
+        // Ein Sturz = ein Alarm: solange nach dem Alarm die Liegelage
+        // geprueft wird, loesen weitere Fenster keinen neuen Alarm aus.
+        if (lage_aktiv) alarm = false;
+#if TESTMODUS
+        (void)dauer;
         char zeile[48];
         snprintf(zeile, sizeof(zeile), "T,%lu,%d,%d",
                  (unsigned long)jetzt, (int)lroundf(p * 100.0f), stimmen);
         bleInfoSenden(zeile);
+#elif LIVE_AUSGABE
+        // Jede Entscheidung sofort anzeigen (alle 0,2 s):
+        //   Sturz-Wert als Balken, Stimmen der letzten 5 Fenster, Urteil
+        {
+          char balken[11];
+          int n = (int)lroundf(p * 10.0f);
+          for (int i = 0; i < 10; i++) balken[i] = i < n ? '#' : '.';
+          balken[10] = 0;
+          const char *urteil = alarm ? "STURZ!" :
+                               lage_aktiv ? "nach Alarm: Lage wird geprueft" :
+                               (p >= VOTE_SCHWELLE) ? "Verdacht" : "kein Sturz";
+          Serial.printf("LIVE  Sturz %3d%%  [%s]  Stimmen %d/%d  %s\n",
+                        (int)lroundf(p * 100.0f), balken, stimmen, VOTE_M, urteil);
+        }
+        (void)dauer;
 #else
         static uint32_t zaehler = 0;
         static float p_max = 0;
