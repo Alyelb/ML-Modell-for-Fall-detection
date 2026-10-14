@@ -95,6 +95,10 @@ T(s, 0.47, 5.0, 12.3, 1.8, [
 ], size=16, punkte=True, abstand=6)
 N(s, "Die Hardware hat der Partner vorgegeben. Den Logger habe ich geschrieben, um eigene Daten aufzunehmen.")
 
+# 4b ----------------------------------------------------------------- Daten
+from daten_folie import TITEL as DATEN_TITEL, daten_folie  # noqa: E402
+daten_folie(d, d.folie(DATEN_TITEL))
+
 # 5 ------------------------------------------------------------------ Etappe 1
 etappe(1, "Etappe 1: Zuerst ein Modell, das an der Hüfte funktioniert",
        "Auf SisFall (Hüfte, 38 Personen) drei Verfahren verglichen: Grenzwert auf die Beschleunigung, "
