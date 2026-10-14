@@ -337,9 +337,9 @@ notiz(s, "CAPPIMU misst dieselben Stürze gleichzeitig an neun Positionen. Statt
 # 12 Vorher / Nachher Fussdaten
 s = folie("Ergebnis 5: Vorher/Nachher – Daten vom Bein und vom Fuß")
 kat = ["A Basis", "K +KFall", "B1 +Bein", "B2 +Fuß", "B2r +Augm."]
-saeulen(s, 0.47, 1.8, 6.0, 4.4, kat, [("Se Schienbein", (28.0, 22.6, 83.9, 84.5, 85.0))], [GRUEN],
+saeulen(s, 0.47, 1.8, 6.0, 4.4, kat, [("Se Schienbein", (28.0, 22.6, 83.9, 84.5, 84.0))], [GRUEN],
         titel="Sensitivität am Schienbein", max_=100, fmt='0"%"', legende=False)
-saeulen(s, 6.75, 1.8, 6.0, 4.4, kat, [("FP/h Smart-Insole", (290, 65, 508, 53, 18))], [ROT],
+saeulen(s, 6.75, 1.8, 6.0, 4.4, kat, [("FP/h Smart-Insole", (290, 65, 508, 53, 28))], [ROT],
         titel="Fehlalarme/h an der Sohle (Smart-Insole, extern)", max_=600, fmt='0', legende=False)
 text(s, 0.47, 6.3, 12.3, 0.55, [
     [("Fußdaten ohne Stürze: −95 % Fehlalarme bei gleicher Sensitivität (+0,6 pp, n. s.). ", {"bold": True}),
