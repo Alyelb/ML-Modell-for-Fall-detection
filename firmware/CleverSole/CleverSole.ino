@@ -653,17 +653,16 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
 // Modell: siehe modell.h (bereits oben eingebunden)
 
 #if MODELL_VERFUEGBAR
-  // Arduino-ESP32-Core 3.x bringt esp-tflite-micro mit. Fehlt der
-  // Header, Bibliothek "Chirale_TensorFlowLite" installieren.
-  #if __has_include(<Chirale_TensorFlowLite.h>)
-    #include <Chirale_TensorFlowLite.h>
-  #endif
+  // Arduino-ESP32-Core 3.x bringt esp-tflite-micro mit. Es darf nur
+  // EINE TFLM-Quelle eingebunden sein: sind Header und kompilierte
+  // Bibliothek aus verschiedenen Versionen, laeuft Invoke() scheinbar
+  // fehlerfrei, schreibt den Ausgabetensor aber nicht.
   #include "tensorflow/lite/micro/micro_interpreter.h"
   #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
   #include "tensorflow/lite/schema/schema_generated.h"
 
   constexpr int ARENA_GROESSE = 60 * 1024;
-  static uint8_t arena[ARENA_GROESSE];
+  alignas(16) static uint8_t arena[ARENA_GROESSE];
   static tflite::MicroInterpreter *interp = nullptr;
   static TfLiteTensor *eingang = nullptr;
   static TfLiteTensor *ausgang = nullptr;
@@ -697,6 +696,33 @@ static void lagePruefen(const float *m, uint32_t jetzt) {   // m: gedreht
     }
     eingang = interp->input(0);
     ausgang = interp->output(0);
+
+#if defined(MODELL_TEST_N) && TESTMODUS
+    // Rechnet TFLM dasselbe wie der Konverter? Die Sollwerte stehen in
+    // modell_sohle.h und werden beim Export aus genau diesem Modell
+    // bestimmt. Schlaegt das fehl, ist jede spaetere Zahl wertlos.
+    {
+      const int8_t muster[MODELL_TEST_N] = MODELL_TEST_MUSTER;
+      const int    soll[MODELL_TEST_N]   = MODELL_TEST_SOLL;
+      int fehler = 0;
+      for (int i = 0; i < MODELL_TEST_N; i++) {
+        memset(eingang->data.int8, muster[i], FENSTER_LEN * KANAELE);
+        if (interp->Invoke() != kTfLiteOk) {
+          Serial.println("Selbsttest: Invoke fehlgeschlagen"); fehler++; break;
+        }
+        const int r = ausgang->data.int8[0];
+        if (r != soll[i]) fehler++;
+        Serial.printf("Selbsttest %d: alle=%4d  roh=%5d  soll=%5d  %s\n",
+                      i, (int)muster[i], r, soll[i],
+                      r == soll[i] ? "OK" : "FALSCH");
+      }
+      if (fehler) {
+        Serial.println("ACHTUNG: TFLM rechnet anders als der Konverter. "
+                       "Haeufigste Ursache: zwei TFLM-Bibliotheken im "
+                       "Build, oder Operatoren mit Broadcast im Graphen.");
+      }
+    }
+#endif
     Serial.printf("Modell geladen. Arena benutzt: %u von %u Byte\n",
                   interp->arena_used_bytes(), ARENA_GROESSE);
     return true;
