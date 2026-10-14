@@ -94,21 +94,21 @@ Ziel des Projekts ist eine Sturzerkennung, die vollständig in einer
 Einlegesohle auf einem ESP32-C6 mit sechsachsiger \emph{Inertial
 Measurement Unit} (IMU) läuft. Öffentliche Sturzdatensätze messen fast
 ausschließlich am Rumpf; einen Datensatz mit Stürzen an der Sohle gibt es
-nicht. Ein 1D-CNN (61\,601 Parameter, int8 rund $80$\,KB) erreicht auf
-SisFall $98{,}0\,\%$ Sensitivität bei $99{,}7\,\%$ Spezifität, verliert
-aber an Bein und Fuß den Großteil seiner Leistung und erzeugt an der Sohle
-bis zu $290$ Fehlalarme je Stunde. Schrittweise wird gezeigt, woran das
-liegt und was hilft: Sturzdaten vom Schienbein heben die Sensitivität am
-Bein von $23$ auf $84\,\%$, Sohlendaten ohne Stürze senken die
-Fehlalarme an der Sohle um mehr als $95\,\%$, ohne Sensitivität zu
-kosten. Als bislang unbeachtete Fehlerquelle erweist sich die
+nicht. Ein 1D-CNN (61\,601 Parameter, int8 rund $77$\,KB) erreicht auf
+SisFall $99{,}0\,\%$ Sensitivität bei $99{,}3\,\%$ Spezifität, verliert
+aber an Bein und Fuß den Großteil seiner Leistung. Schrittweise wird
+gezeigt, woran das liegt und was hilft: Sturzdaten vom Schienbein heben
+die Sensitivität am Bein von $21$ auf $83\,\%$, treiben aber die
+Fehlalarme an der Sohle auf mehrere hundert je Stunde; Sohlendaten ohne
+Stürze senken sie um $91$--$96\,\%$, ohne Sensitivität zu kosten. Als bislang unbeachtete Fehlerquelle erweist sich die
 \textbf{Achsenlage des Sensors}: Spiegelbildlich getragene Sensoren
 unterscheiden sich bei identischen Stürzen um bis zu Faktor neun, und
 allein die Ausrichtung der eigenen Hüftaufnahmen an den Achsen von
-SisFall hebt die Erkennung von $3$ auf $15$ von $22$ Stürzen.
+SisFall hebt die Erkennung von $2$ auf $15$ von $22$ Stürzen.
 Eine Rotationsaugmentierung macht das Modell signifikant robuster. Auf
-dem eigenen Prototyp erkennt das Modell am Knöchel $20$--$22$ von $22$
-bzw.\ $23$ Stürzen einer Person. Alle Aussagen sind subjektunabhängig
+dem eigenen Prototyp erkennt das Modell nach Ausrichtung über die
+Schwerkraft -- wie in der Firmware -- alle $67$ Stürze einer Person an
+Hüfte und Knöcheln. Alle Aussagen sind subjektunabhängig
 kreuzvalidiert und, wo möglich, gepaart statistisch abgesichert.
 
 \vspace{0.3cm}
@@ -283,8 +283,9 @@ Wiederholungen mit anschließender Liegephase von $5$\,s) sowie Gehen,
 Joggen, Treppen, Hinsetzen, kräftiges Hinsetzen, Springen, Aufheben
 und Hinlegen. Insgesamt liegen $22$/$23$/$22$ Stürze und
 $9{,}7$/$6{,}6$/$7{,}2$\,min Alltag (Hüfte/Knöchel rechts/links) vor.
-Aufnahmen in der Sohle wurden nur unvollständig und einseitig erstellt
-und werden nicht ausgewertet.
+Aufnahmen in beiden Sohlen (vier Sturzarten, Alltag) entstanden erst
+zum Projektende; sie werden in Abschnitt~\ref{sec:sohle} beschrieben,
+aber noch nicht mit dem Modell ausgewertet.
 
 \section{Datenaufbereitung}
 Alle Datensätze werden in eine gemeinsame Form gebracht: sechs Kanäle in
@@ -344,7 +345,8 @@ gespiegelte Kopie je Fenster).}
       mit $95\,\%$-Konfidenzintervall. Ein Unterschied gilt als
       gesichert, wenn das Intervall die Null nicht enthält.
       Konfidenzintervalle einzelner Anteile nach Wilson.
-\item \textbf{Fehlalarme} auf reinen Alltagsdaten, umgerechnet je Stunde.
+\item \textbf{Fehlalarme} auf reinen Alltagsdaten, umgerechnet je Stunde
+      (Fenster mit $1$\,s Versatz, ohne Abstimmungsregel).
 \item \textbf{Betriebsbewertung} wie in der Firmware: Inferenz alle
       $0{,}2$\,s, Alarm bei 3 von 5 Fenstern über $0{,}5$. Ein Sturz gilt
       als erkannt, wenn spätestens $1$\,s nach dem Aufprall ein Alarm
@@ -359,10 +361,21 @@ Zielgruppe, (03) progressives Training, (04) Fuß und Orientierung,
 Die Firmware ist für die Einlegesohle ausgelegt. Sie liest die IMU mit
 $100$\,Hz, tastet auf $50$\,Hz herunter, hält einen Ringpuffer von $2$\,s
 und führt alle $200$\,ms eine Inferenz mit TensorFlow Lite Micro aus
-(int8, 9 Operatoren). Eine 3-von-5-Regel entscheidet über den Alarm, der
-per BLE gemeldet wird. Eingesetzt wird B2r, da es gegenüber Drehungen am
-robustesten ist (Abschnitt~\ref{sec:orient}); int8 und Gleitkommamodell
-treffen auf den Pilotfenstern in $96\,\%$ der Fälle dieselbe Entscheidung.
+(int8, $77$\,KB, 7 Operatoren). Eine 3-von-5-Regel entscheidet über den
+Alarm, der per BLE gemeldet wird. Eingesetzt wird B2r, da es gegenüber
+Drehungen am robustesten ist (Abschnitt~\ref{sec:orient}); int8 und
+Gleitkommamodell treffen auf den Pilotfenstern in $99{,}5\,\%$ der Fälle
+dieselbe Entscheidung.
+
+\textbf{Batch-Normalisierung und Selbsttest.} Auf dem ESP32-C6 lieferte
+das Modell zunächst unabhängig vom Eingang konstant $p \approx 0{,}47$,
+während dieselbe Datei am PC korrekt rechnete. Ursache waren die aus der
+Batch-Normalisierung entstehenden MUL/ADD-Operationen mit Broadcast, die
+TFLite Micro dort falsch auswertet. Das Exportskript rechnet die
+Normalisierung deshalb in die jeweils folgende Faltungs- bzw.
+Dense-Schicht ein (maximale Abweichung $< 10^{-5}$) und legt fünf
+Selbsttest-Muster samt Sollausgabe ab, die die Firmware beim Start
+nachrechnet.
 
 \textbf{Selbstkalibrierung der Einbaulage.} Vorgabe ist: IMU-Modul flach
 unter der Ferse, Chip oben, aufgedruckter X-Pfeil zu den Zehen. Da die
@@ -408,45 +421,47 @@ zusammen, welche sich bestätigt haben und welche nicht.
 \begin{table}[H]
 \centering\small
 \caption{Basismodelle auf SisFall, subjektunabhängiger Testsatz
-(10 Probanden, 13\,031 Fenster).}
+(10 Probanden, 12\,431 Fenster). Quelle: Notebook~01.}
 \label{tab:basis}
 \begin{tabularx}{0.85\textwidth}{Y c c c r r}
 \toprule
 \textbf{Modell} & \textbf{Se} & \textbf{Sp} & \textbf{Acc} & \textbf{FP} & \textbf{FN} \\
 \midrule
-Schwellwert (Bourke) & $96{,}7\,\%$ & $76{,}8\,\%$ & $77{,}5\,\%$ & 11\,503 & 59 \\
-Random Forest (18 Betragsmerkmale) & $94{,}2\,\%$ & $99{,}6\,\%$ & $99{,}4\,\%$ & 215 & 105 \\
-\textbf{1D-CNN} & $\mathbf{98{,}0\,\%}$ & $\mathbf{99{,}7\,\%}$ & $\mathbf{99{,}6\,\%}$ & \textbf{39} & \textbf{18} \\
+Schwellwert ($|a| > 2{,}8$\,g) & $96{,}7\,\%$ & $82{,}9\,\%$ & $83{,}2\,\%$ & 2\,074 & 10 \\
+Random Forest (18 Betragsmerkmale) & $92{,}7\,\%$ & $99{,}6\,\%$ & $99{,}4\,\%$ & 48 & 22 \\
+\textbf{1D-CNN} & $\mathbf{99{,}0\,\%}$ & $\mathbf{99{,}3\,\%}$ & $\mathbf{99{,}3\,\%}$ & 82 & \textbf{3} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 Jede Stufe behebt die Schwäche der vorigen: Der Random Forest senkt die
-Fehlalarme des Schwellwerts um den Faktor $50$, das CNN zusätzlich die
-übersehenen Stürze von 105 auf 18. Im Random Forest entfallen
-$62{,}3\,\%$ der Merkmalswichtigkeit auf das Gyroskop. Der direkte
-Achsenvergleich mit identischem CNN relativiert den Nutzen jedoch: mit
-6 Achsen $98{,}7\,\%$, nur mit Beschleunigung $98{,}0\,\%$, nur mit
-Gyroskop $93{,}0\,\%$ Sensitivität. An der Hüfte liegt die Leistung
-nahe der Obergrenze; der Vorteil des Gyroskops ($+0{,}7$\,pp) ist dort
-klein. Ein mit 3 Achsen trainiertes Modell erreicht auf UniMiB-SHAR
-($\pm 2$\,g, Hosentasche) nach Fine-Tuning $95{,}9\,\%$ (Zero-Shot
-$20{,}4\,\%$).
+Fehlalarm-Fenster des Schwellwerts um den Faktor $43$, das CNN die
+übersehenen Stürze von 22 auf 3. Ein Schwellwert kann nur Sensitivität
+gegen Fehlalarme tauschen: Bei $1{,}5$\,g erkennt er alle Stürze bei
+$57{,}5\,\%$ Spezifität, bei $4{,}0$\,g noch $74{,}7\,\%$ der Stürze bei
+$95{,}9\,\%$ Spezifität. Im Random Forest entfallen $62{,}3\,\%$ der
+Merkmalswichtigkeit auf das Gyroskop. Der direkte Achsenvergleich mit
+identischem CNN relativiert den Nutzen jedoch: mit 6 Achsen
+$99{,}3\,\%$, nur mit Beschleunigung $98{,}0\,\%$, nur mit Gyroskop
+$94{,}7\,\%$ Sensitivität. An der Hüfte liegt die Leistung nahe der
+Obergrenze; der Vorteil des Gyroskops ($+1{,}3$\,pp) ist dort klein. Ein
+mit 3 Achsen trainiertes Modell erreicht auf UniMiB-SHAR ($\pm 2$\,g,
+Hosentasche) nach Fine-Tuning $95{,}5\,\%$ (Zero-Shot $23{,}5\,\%$).
 
 \section{Übertragbarkeit auf andere Datensätze}
 \begin{table}[H]
 \centering\small
 \caption{Transfer des SisFall-Modells. Zero-Shot (ZS) und nach
-Fine-Tuning (FT), je eine subjektunabhängige Aufteilung.}
+Fine-Tuning (FT), je eine subjektunabhängige Aufteilung. Quelle: Notebook~02.}
 \label{tab:transfer}
 \begin{tabularx}{\textwidth}{l l c c Y}
 \toprule
 \textbf{Datensatz} & \textbf{Position, Hz} & \textbf{Se ZS} & \textbf{Se FT} & \textbf{Anmerkung} \\
 \midrule
-KFall    & Rücken, 100   & $100{,}0\,\%$ & $100{,}0\,\%$ & Sp $99{,}5\,\%$ ohne Anpassung \\
-UMAFall  & Taille, 20    & $43{,}8\,\%$  & $91{,}7\,\%$  & \\
-UMAFall  & Knöchel, 20   & $19{,}4\,\%$  & $27{,}8\,\%$  & 36 Sturzfenster im Test; CV in Tab.~\ref{tab:prog} \\
-FallAllD & Taille, 238   & $12{,}7\,\%$  & $69{,}8\,\%$  & Messbereich $\pm 8$\,g \\
+KFall    & Rücken, 100   & $99{,}5\,\%$  & $100{,}0\,\%$ & Sp $99{,}5\,\%$ ohne Anpassung \\
+UMAFall  & Taille, 20    & $45{,}8\,\%$  & $93{,}8\,\%$  & \\
+UMAFall  & Knöchel, 20   & $25{,}0\,\%$  & $25{,}0\,\%$  & 36 Sturzfenster im Test; CV in Tab.~\ref{tab:prog} \\
+FallAllD & Taille, 238   & $11{,}3\,\%$  & $75{,}8\,\%$  & Messbereich $\pm 8$\,g \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -454,7 +469,7 @@ FallAllD & Taille, 238   & $12{,}7\,\%$  & $69{,}8\,\%$  & Messbereich $\pm 8$\,
 KFall überträgt ohne Anpassung, FallAllD trotz der höchsten Abtastrate
 kaum. Ein Kontrollversuch schließt den Messbereich als Ursache aus:
 Auf $\pm 8$\,g und $\pm 4$\,g begrenzte SisFall-Testdaten erreichen
-unverändert $98{,}7\,\%$, selbst $\pm 2$\,g noch $96{,}3\,\%$. Ursprünglich
+unverändert $99{,}0\,\%$, selbst $\pm 2$\,g noch $98{,}0\,\%$. Ursprünglich
 wurde die Lücke den Signaleigenschaften der Hardware zugeschrieben. Die
 Ergebnisse zur Orientierung (Abschnitt~\ref{sec:orient}) legen eine
 einfachere Erklärung nahe: An der eigenen Hüfte bricht das Basismodell
@@ -463,70 +478,74 @@ FallAllD wurde dies nicht geprüft, ist aber naheliegend.
 
 \section{Fehlalarme und zeitliche Plausibilisierung}
 Auf den Alltagsdaten am Knöchel (UMAFall, $1{,}76$\,h) löst das
-Basismodell $2{,}6\,\%$ der Fenster aus, rund $94$ Fehlalarme je Stunde,
-vor allem beim Joggen ($15{,}4\,\%$) und Gehen ($3{,}7\,\%$) -- also bei
-jedem Fersenaufsatz. Die Wahrscheinlichkeit liegt dabei bis $p = 1{,}000$;
+Basismodell $3{,}8\,\%$ der Fenster aus, rund $137$ Fehlalarme je Stunde,
+vor allem beim Joggen ($20{,}1\,\%$), Türöffnen ($5{,}7\,\%$) und Gehen
+($4{,}9\,\%$) -- also bei jedem Fersenaufsatz. Die Wahrscheinlichkeit liegt dabei bis $p = 1{,}000$;
 eine höhere Schwelle allein hilft nicht.
 
 Eine N-von-M-Regel verlangt $N$ positive unter den letzten $M$
 Entscheidungen. Sie wirkt erst bei kleiner Schrittweite ($0{,}2$\,s):
 Bei $1$\,s liegt der Aufprall in nur einem Fenster, sodass jede Regel mit
-$N \geq 2$ scheitert. Auf UMAFall senkt \emph{5-von-7} die Fehlalarme
-des angepassten Modells um $84\,\%$ ($265 \rightarrow 42$/h), kostet aber
-die Hälfte der Sensitivität ($61{,}7 \rightarrow 27{,}7\,\%$). Beim nicht
-angepassten Modell bleiben von 47 Stürzen nur drei erkannt, beim
-angepassten dreizehn: Nur ein angepasstes Modell erzeugt um den Aufprall
-einen zusammenhängenden Block positiver Fenster. \textbf{Voting ersetzt
-die Domänenanpassung nicht, es setzt sie voraus.}
+$N \geq 2$ scheitert. Auf UMAFall (47 Stürze, $0{,}57$\,h Alltag)
+senkt \emph{3-von-5} die Fehlalarme des angepassten Modells um $70\,\%$
+($246 \rightarrow 74$/h), kostet aber $40\,\%$ der erkannten Stürze
+($25 \rightarrow 15$). Strengere Regeln lassen kaum Stürze übrig
+(\emph{5-von-7}: 3 von 47 bei $40$/h). Das nicht angepasste Modell
+erkennt mit 3-von-5 ebenso 15 Stürze, bei $98$/h. \textbf{Voting allein
+löst das Fehlalarmproblem am Knöchel nicht}; es glättet nur, was das
+Modell liefert.
 
 \section{Progressives Training und Hard Negatives}
 \begin{table}[H]
 \centering\small
-\caption{UMAFall-Knöchel, fünffach kreuzvalidiert (157 Stürze).}
+\caption{UMAFall-Knöchel, fünffach kreuzvalidiert (157 Stürze). Quelle: Notebook~03.}
 \label{tab:prog}
 \begin{tabularx}{\textwidth}{l Y c c}
 \toprule
 & \textbf{Strategie} & \textbf{Se [95\,\%-KI]} & \textbf{Sp} \\
 \midrule
-A  & Zero-Shot (SisFall)                          & $25{,}5\,\%$ [$19{,}3$; $32{,}8$] & $97{,}4\,\%$ \\
-B  & direkt: SisFall $\rightarrow$ UMAFall          & $42{,}7\,\%$ [$35{,}2$; $50{,}5$] & $96{,}7\,\%$ \\
-C1 & nur Zwischenstufe KFall                         & $17{,}2\,\%$ [$12{,}1$; $23{,}9$] & $98{,}7\,\%$ \\
-C2 & progressiv: SisFall $\rightarrow$ KFall $\rightarrow$ UMAFall & $\mathbf{52{,}2\,\%}$ [$44{,}5$; $59{,}9$] & $96{,}5\,\%$ \\
+A  & Zero-Shot (SisFall)                          & $28{,}7\,\%$ [$22{,}2$; $36{,}2$] & $96{,}2\,\%$ \\
+B  & direkt: SisFall $\rightarrow$ UMAFall          & $35{,}7\,\%$ [$28{,}6$; $43{,}4$] & $96{,}8\,\%$ \\
+C1 & nur Zwischenstufe KFall                         & $12{,}7\,\%$ [$8{,}4$; $18{,}9$] & $98{,}6\,\%$ \\
+C2 & progressiv: SisFall $\rightarrow$ KFall $\rightarrow$ UMAFall & $\mathbf{56{,}7\,\%}$ [$48{,}9$; $64{,}2$] & $96{,}8\,\%$ \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Progressiv übertrifft direkt um $+9{,}9$\,pp (KI $[+5{,}1; +14{,}7]$,
-5 von 5 Falten), obwohl die Zwischenstufe allein die Leistung zunächst
+Progressiv übertrifft direkt um $+23{,}8$\,pp (KI $[+3{,}9; +43{,}8]$,
+3 von 5 Falten besser, 2 gleich; Spezifität unverändert), obwohl die
+Zwischenstufe allein die Leistung zunächst
 senkt (C1): Sie verallgemeinert die Repräsentation, statt sie zu
 verbessern. Eine Höhergewichtung impactstarker Alltagsfenster
 (\emph{Hard Negatives}, Faktor 3) hebt zwar die Spezifität um
-$+2{,}1$\,pp, kostet aber $-7{,}4$\,pp Sensitivität (KI
-$[-10{,}4; -4{,}4]$, beides gesichert). Für ein Notrufsystem ist das der
+$+1{,}8$\,pp, kostet aber $-6{,}3$\,pp Sensitivität (KI
+$[-9{,}9; -2{,}6]$, beides gesichert, 5 von 5 Falten). Für ein Notrufsystem ist das der
 falsche Tausch, denn Fehlalarme lassen sich nachgelagert filtern,
 übersehene Stürze nicht.
 
 Eine Einschränkung zeigt Abschnitt~\ref{sec:orient}: Mit vielen
 Sturzdaten am Bein (CAPPIMU, 1462 Sturzfenster) ist ein Modell
 \emph{ohne} Rumpf-Vortraining (L0) ebenso gut wie die progressive Kette
-(B2; $-4{,}2$\,pp, nicht gesichert). Das Vortraining hilft also, wenn
+(B2; $+0{,}5$\,pp, nicht gesichert). Das Vortraining hilft also, wenn
 Zieldaten knapp sind.
 
 \section{Zielgruppe: ältere Menschen}
 Auf WEDA-FALL (Handgelenk) erzeugen Ältere bei gleichen Aktivitäten
-$3{,}8$-mal mehr Fehlalarme ($201$ gegenüber $53$/h, Schwelle $0{,}9$).
-Die Aufschlüsselung zeigt, dass dies fast nur auf das Klatschen
-zurückgeht ($25{,}5$ gegenüber $2{,}5\,\%$ der Fenster); beim Gehen
-($0{,}7$ gegenüber $0{,}4\,\%$) und Treppensteigen unterscheiden sich die
-Gruppen kaum. An der Sohle (Smart-Insole) liegen Ältere ($373$/h) und
-Parkinson-Patienten ($302$/h) dagegen bei denselben Geh- und
-Aufstehtests deutlich über jüngeren Erwachsenen ($215$/h). Für die Sohle
+$4{,}0$-mal mehr Fehlalarme ($172$ gegenüber $43$/h, Schwelle $0{,}9$).
+Die Aufschlüsselung zeigt, dass dies vor allem auf Klatschen
+($21{,}0$ gegenüber $2{,}0\,\%$ der Fenster) und Türöffnen ($6{,}8$
+gegenüber $0{,}8\,\%$) zurückgeht; beim Gehen ($0{,}2$ gegenüber
+$0{,}4\,\%$) und Treppensteigen schneiden Ältere sogar besser ab. An der
+Sohle (Smart-Insole) liegen Ältere ($127$/h) und Parkinson-Patienten
+($120$/h) dagegen bei denselben Geh- und Aufstehtests deutlich über
+jüngeren Erwachsenen ($69$/h). Für die Sohle
 ist die Zielgruppe also ein realer Faktor.
 
 \section{Vom Rumpf zum Fuß}
 \textbf{Die Sohle ist die schwierigste Position.} Die Partnerdaten des
-bestehenden Sohlenprototyps sind mit $10$\,Hz, $\pm 2$\,g ($16{,}7\,\%$
-der Werte abgeschnitten) und ohne Gyroskop nicht verwendbar. Unverfälschte
+bestehenden Sohlenprototyps sind mit $10$\,Hz, $\pm 2$\,g je Achse
+($6{,}4\,\%$ aller Achswerte am Anschlag, schon beim Gehen) und ohne
+Gyroskop nicht verwendbar. Unverfälschte
 Sohlendaten zeigen, warum: Schon beim Gehen erreicht $|a|$ im
 99.~Perzentil $4{,}4$--$5{,}1$\,g, Einzelachsen bis $\pm 16$\,g -- mehr
 als viele Stürze am Rumpf. Tabelle~\ref{tab:kurve} zeigt das unveränderte
@@ -535,36 +554,45 @@ Basismodell an allen Positionen.
 \begin{table}[H]
 \centering\small
 \caption{Basismodell (Zero-Shot) je Position. CAPPIMU: dieselben Stürze
-gleichzeitig an neun Positionen (je 731 Sturzfenster, $\approx 31$\,h Alltag).}
+gleichzeitig an neun Positionen (je 731 Sturzfenster, $\approx 31$\,h Alltag).
+Quelle: Notebook~04, Teil~A.}
 \label{tab:kurve}
 \begin{tabularx}{\textwidth}{Y c c | Y c c}
 \toprule
 \textbf{Position} & \textbf{Se} & \textbf{FP/h} & \textbf{Position} & \textbf{Se} & \textbf{FP/h} \\
 \midrule
-Kopf              & $28{,}4\,\%$ & 59  & Handgelenk rechts & $51{,}8\,\%$ & 118 \\
-Brust             & $48{,}4\,\%$ & 92  & Hosentasche       & $23{,}0\,\%$ & 63 \\
-Oberarm links     & $6{,}2\,\%$  & 46  & Schienbein links  & $16{,}6\,\%$ & 168 \\
-Oberarm rechts    & $54{,}6\,\%$ & 116 & Schienbein rechts & $39{,}5\,\%$ & 36 \\
-Handgelenk links  & $9{,}9\,\%$  & 84  & \textbf{Sohle} (ImbalanSense / Smart-Insole) & -- & \textbf{161 / 290} \\
+Kopf              & $28{,}5\,\%$ & 66  & Handgelenk rechts & $50{,}9\,\%$ & 133 \\
+Brust             & $51{,}4\,\%$ & 81  & Hosentasche       & $21{,}2\,\%$ & 63 \\
+Oberarm links     & $5{,}1\,\%$  & 45  & Schienbein links  & $12{,}2\,\%$ & 152 \\
+Oberarm rechts    & $47{,}3\,\%$ & 72  & Schienbein rechts & $48{,}3\,\%$ & 43 \\
+Handgelenk links  & $13{,}5\,\%$ & 83  & \textbf{Sohle} (ImbalanSense / Smart-Insole) & -- & \textbf{65 / 101} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 Statt einer mit dem Abstand vom Rumpf fallenden Kurve unterscheiden sich
 \textbf{linke und rechte Seite} bei identischen Stürzen um bis zu Faktor
-neun -- ein Befund, dem Abschnitt~\ref{sec:orient} nachgeht.
+neun -- ein Befund, dem Abschnitt~\ref{sec:orient} nachgeht. Zugleich
+zeigt sich, warum ein Spitzenwert am Bein nicht trennen kann: Am
+Schienbein liegt die Aufprallspitze eines Sturzes im Median bei
+$2{,}9$--$3{,}0$\,g, das 99.~Perzentil des Alltags bei $9{,}9$--$10{,}2$\,g;
+an der Brust ($5{,}0$ gegenüber $6{,}0$\,g) und am Kopf ($2{,}9$ gegenüber
+$2{,}2$\,g) liegen beide noch nah beieinander.
 
 \textbf{Vorher/Nachher: Daten vom Bein und vom Fuß.}
 Tabelle~\ref{tab:fussdaten} zeigt, wie sich die Leistung mit jeder
 Datenquelle ändert. Bewertet wird auf Testprobanden, die nicht im
-Training waren; Smart-Insole ist in den oberen vier Zeilen ein
-vollständig externer Test.
+Training waren; Smart-Insole ist außer in der letzten Zeile ein
+vollständig externer Test. Die oberen vier Zeilen (ohne Augmentierung)
+und die unteren drei (augmentiert) stammen aus zwei Läufen; verglichen
+wird jeweils nur innerhalb eines Blocks.
 
 \begin{table}[H]
 \centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{Wirkung von Bein- und Fußdaten, fünffach kreuzvalidiert
-(1462 Sturzfenster am Schienbein). Quelle: Notebook~04.}
+(1462 Sturzfenster am Schienbein). Quelle: Notebook~04, Teil~B (oben)
+und Teil~E (unten).}
 \label{tab:fussdaten}
 \begin{tabularx}{\textwidth}{l Y c c c c}
 \toprule
@@ -572,47 +600,52 @@ vollständig externer Test.
 \cmidrule(lr){3-4}\cmidrule(lr){5-6}
 & \textbf{Training} & \textbf{Se [95\,\%-KI]} & \textbf{Sp} & \textbf{ImbalanSense} & \textbf{Smart-Insole} \\
 \midrule
-A  & SisFall (Basis)                              & $28{,}0\,\%$ [$25{,}8$; $30{,}4$] & $97{,}2\,\%$ & 161 & 290 \\
-K  & + KFall                                     & $22{,}6\,\%$ [$20{,}5$; $24{,}8$] & $98{,}7\,\%$ & 51  & 65 \\
-B1 & + Schienbein-Stürze (\emph{ohne} Fußdaten)   & $83{,}9\,\%$ [$81{,}9$; $85{,}7$] & $98{,}8\,\%$ & 412 & 508 \\
-B2 & + ImbalanSense (Sohle, ohne Stürze)          & $\mathbf{84{,}5\,\%}$ [$82{,}5$; $86{,}2$] & $96{,}4\,\%$ & \textbf{18} & \textbf{53} \\
+A  & SisFall (Basis)                              & $30{,}2\,\%$ [$27{,}9$; $32{,}6$] & $97{,}3\,\%$ & 65  & 101 \\
+K  & + KFall                                     & $21{,}5\,\%$ [$19{,}5$; $23{,}7$] & $98{,}5\,\%$ & 105 & 115 \\
+B1 & + Schienbein-Stürze (\emph{ohne} Fußdaten)   & $83{,}2\,\%$ [$81{,}2$; $85{,}0$] & $98{,}8\,\%$ & 268 & 400 \\
+B2 & + ImbalanSense (Sohle, ohne Stürze)          & $77{,}6\,\%$ [$75{,}4$; $79{,}6$] & $90{,}3\,\%$ & 36  & 81 \\
 \midrule
-B2r & B1r + ImbalanSense, augmentiert            & $84{,}0\,\%$ [$82{,}0$; $85{,}8$] & $96{,}0\,\%$ & $\mathbf{13{,}2}$ & $\mathbf{28{,}0}$ \\
+B1r & B1, augmentiert                            & $84{,}3\,\%$ [$82{,}4$; $86{,}1$] & $98{,}5\,\%$ & 350 & 310 \\
+B2r & B1r + ImbalanSense, augmentiert            & $\mathbf{84{,}0\,\%}$ [$82{,}0$; $85{,}8$] & $96{,}0\,\%$ & $\mathbf{13{,}2}$ & $\mathbf{28{,}0}$ \\
 & B2r + Smart-Insole im Training               & $82{,}1\,\%$ [$80{,}0$; $84{,}0$] & $98{,}1\,\%$ & $1{,}6$ & $11{,}1$ \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 Drei Befunde. (1) \textbf{Sturzdaten vom Bein sind entscheidend}:
-$+61{,}2$\,pp Sensitivität (B1 gegenüber K, 5 von 5 Falten).
-(2) \textbf{Ohne Fußdaten explodieren die Fehlalarme an der Sohle}
-($412$ bzw.\ $508$/h): Das Modell lernt \glqq kräftiger Beinimpuls =
-Sturz\grqq{}, und jeder Fersenaufsatz ist einer. (3) \textbf{Fußdaten ohne
-Stürze beheben das ohne Sensitivitätsverlust}: $-95\,\%$ Fehlalarme
-(Spezifität $+10{,}9$ bzw.\ $+12{,}6$\,pp, gesichert), Sensitivität
-$+0{,}6$\,pp (nicht verschieden). Im Gegensatz zu den Hard Negatives
-werden hier keine vorhandenen Fenster umgewichtet, sondern Daten der
+$+61{,}5$\,pp Sensitivität (B1 gegenüber K, KI $[+59{,}3; +63{,}8]$,
+5 von 5 Falten). (2) \textbf{Ohne Fußdaten explodieren die Fehlalarme an
+der Sohle} ($268$ bis $400$/h): Das Modell lernt \glqq kräftiger
+Beinimpuls = Sturz\grqq{}, und jeder Fersenaufsatz ist einer.
+(3) \textbf{Fußdaten ohne Stürze beheben das -- ohne Sensitivitätsverlust
+aber nur mit Augmentierung.} Augmentiert (B2r gegenüber B1r) sinken die
+Fehlalarme um $96$ bzw.\ $91\,\%$ (Spezifität $+9{,}4$ bzw.\
+$+8{,}1$\,pp, gesichert), die Sensitivität bleibt gleich ($-0{,}2$\,pp,
+nicht verschieden). Ohne Augmentierung (B2 gegenüber B1) sinken die
+Fehlalarme ebenfalls ($-87$ bzw.\ $-80\,\%$), dafür fällt die Spezifität
+am Schienbein gesichert um $8{,}6$\,pp und die Sensitivität um
+$5{,}8$\,pp (nicht gesichert). Im Gegensatz zu den Hard Negatives werden
+hier keine vorhandenen Fenster umgewichtet, sondern Daten der
 Zielposition ergänzt. Smart-Insole als zweite Sohlenquelle senkt die Fehlalarme zwar
 weiter ($13{,}2 \rightarrow 1{,}6$ bzw.\ $28{,}0 \rightarrow 11{,}1$/h),
 kostet aber gesichert Sensitivität ($-2{,}0$\,pp, KI $[-3{,}7; -0{,}2]$,
 nur 1 von 5 Falten). Da die Lizenz zudem nicht-kommerziell ist, bleibt
 B2r das eingesetzte Modell; die Zeile dient nur dem Bericht.
-Die Spezifität am Schienbein liegt in allen Zeilen über $96\,\%$,
-obwohl die Sensitivität zwischen $23$ und $85\,\%$ schwankt; dasselbe
-gilt für die Genauigkeit, die bei seltenen Stürzen von den Alltagsfenstern
-dominiert wird.
+Die Genauigkeit wird nicht berichtet: Sie liegt bei seltenen Stürzen in
+allen Zeilen über $90\,\%$, obwohl die Sensitivität zwischen $21$ und
+$84\,\%$ schwankt.
 
 \section{Einfluss der Sensororientierung}
 \label{sec:orient}
 \textbf{Spiegeltest.} Werden die Sensoren der linken Körperseite
 rechnerisch an der $xz$-Ebene gespiegelt (Gyroskop als Pseudovektor),
 erreicht das Basismodell dort die Werte der rechten Seite: Oberarm
-$6{,}2 \rightarrow 60{,}2\,\%$, Handgelenk $9{,}9 \rightarrow 60{,}3\,\%$,
-Schienbein $16{,}6 \rightarrow 41{,}9\,\%$. Umgekehrt fällt die gespiegelte
-rechte Seite auf $4{,}5$, $7{,}5$ und $17{,}0\,\%$. \textbf{Der
+$5{,}1 \rightarrow 53{,}8\,\%$, Handgelenk $13{,}5 \rightarrow 57{,}5\,\%$,
+Schienbein $12{,}2 \rightarrow 48{,}3\,\%$. Umgekehrt fällt die gespiegelte
+rechte Seite auf $4{,}4$, $7{,}7$ und $14{,}9\,\%$. \textbf{Der
 Seitenunterschied ist damit vollständig durch die Achsenlage erklärt.}
 Bei 20 zufälligen Drehungen schwankt die Sensitivität am Schienbein
-zwischen $9$ und $58\,\%$.
+zwischen $6$ und $58\,\%$.
 
 \textbf{Gegenmaßnahme: Augmentierung.} Tabelle~\ref{tab:matrix}
 vergleicht fünf Trainingsketten auf denselben Falten.
@@ -620,7 +653,7 @@ vergleicht fünf Trainingsketten auf denselben Falten.
 \begin{table}[H]
 \centering\small
 \caption{Trainingsketten, fünffach kreuzvalidiert. Gedreht: Mittel über
-fünf zufällige Drehungen der Testdaten. Quelle: Notebook~11; alle fünf
+fünf zufällige Drehungen der Testdaten. Quelle: Notebook~04, Teil~D; alle fünf
 Zeilen stammen aus demselben Lauf und denselben Falten, nur so ist der
 Vergleich zwischen den Ketten zulässig.}
 \label{tab:matrix}
@@ -630,25 +663,26 @@ Vergleich zwischen den Ketten zulässig.}
 \cmidrule(lr){3-4}\cmidrule(lr){5-6}
 & \textbf{Kette} & \textbf{original} & \textbf{gedreht} & \textbf{IMB} & \textbf{SI} \\
 \midrule
-W   & SisFall                                 & $28{,}0\,\%$ & $27{,}6\,\%$ & 161 & 290 \\
-WK  & SisFall $\rightarrow$ KFall              & $22{,}0\,\%$ & $18{,}8\,\%$ & 112 & 148 \\
-L0  & Bein + Fuß \emph{ohne} Vortraining      & $84{,}5\,\%$ & $58{,}0\,\%$ & 6   & 26 \\
-B2  & WK $\rightarrow$ Bein + Fuß             & $80{,}6\,\%$ & $60{,}6\,\%$ & 23  & 59 \\
-B2r & wie B2, augmentiert                     & $\mathbf{85{,}0\,\%}$ & $\mathbf{78{,}0\,\%}$ & \textbf{4} & \textbf{18} \\
+W   & SisFall                                 & $30{,}2\,\%$ & $27{,}1\,\%$ & 65  & 101 \\
+WK  & SisFall $\rightarrow$ KFall              & $21{,}1\,\%$ & $16{,}8\,\%$ & 80  & 88 \\
+L0  & Bein + Fuß \emph{ohne} Vortraining      & $83{,}6\,\%$ & $51{,}6\,\%$ & 4   & 18 \\
+B2  & WK $\rightarrow$ Bein + Fuß             & $84{,}1\,\%$ & $57{,}9\,\%$ & 17  & 50 \\
+B2r & wie B2, augmentiert                     & $\mathbf{84{,}7\,\%}$ & $\mathbf{75{,}8\,\%}$ & \textbf{5} & \textbf{16} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Die Augmentierung kostet nichts und gewinnt in allen Größen: gedreht
-$+17{,}3$\,pp (KI $[+8{,}9; +25{,}8]$, 5 von 5 Falten), original
-$+4{,}6$\,pp, Spezifität an beiden Sohlendatensätzen gesichert höher.
+Die Augmentierung kostet nichts: gedreht $+17{,}9$\,pp (KI
+$[+11{,}9; +23{,}9]$, 5 von 5 Falten), original $+0{,}8$\,pp (nicht
+verschieden), Spezifität an Smart-Insole gesichert höher ($+1{,}0$\,pp),
+an ImbalanSense nicht verschieden.
 
 Die Fehlalarmraten dieser Tabelle sind nicht mit denen aus
 Tabelle~\ref{tab:fussdaten} vergleichbar: beide Läufe verwenden
 unterschiedliche Obergrenzen für die Alltagsstichprobe und
 unterschiedliche Zufallsstartwerte, und die Fehlalarme an der Sohle
 streuen zwischen den Falten erheblich (B1r: $65$ bis $755$/h). Für B2r
-stehen deshalb hier $4$ bzw.\ $18$/h, in Tabelle~\ref{tab:fussdaten}
+stehen deshalb hier $5$ bzw.\ $16$/h, in Tabelle~\ref{tab:fussdaten}
 dagegen $13{,}2$ bzw.\ $28{,}0$/h. Belastbar ist jeweils nur der
 Vergleich \emph{innerhalb} einer Tabelle.
 
@@ -660,8 +694,9 @@ $+z$ als Vorwärtsrichtung aus. Daraus folgt die feste Drehung
 $x_S = -y$, $y_S = x$, $z_S = z$ samt Ausgleich der Platinenneigung
 ($\approx 25^{\circ}$) -- bestimmt aus der Einbaulage, nicht aus den
 Ergebnissen. Das \emph{unveränderte} Basismodell erkennt danach
-\textbf{15 statt 3 von 22 Stürzen} bei gleicher Zahl an Fehlalarmen
-(Tabelle~\ref{tab:pilot}). Ebenso zeigte die Liegelage, dass der linke
+\textbf{15 statt 2 von 22 Stürzen} bei etwa gleicher Zahl an
+Fehlalarmen (13 statt 12; Tabelle~\ref{tab:pilot}). Nur die
+Achsenvertauschung ohne Ausgleich der Neigung bringt 8 von 22. Ebenso zeigte die Liegelage, dass der linke
 Knöchelsensor gegenüber dem rechten um $180^{\circ}$ um die Hochachse
 gedreht war.
 
@@ -669,7 +704,9 @@ gedreht war.
 \begin{table}[H]
 \centering\small
 \caption{Betriebsbewertung auf den eigenen Aufnahmen (3 von 5, Schwelle
-$0{,}5$): erkannte Stürze / Fehlalarm-Ereignisse. Alltag:
+$0{,}5$): erkannte Stürze / Fehlalarm-Ereignisse. \glqq Lage über
+Schwerkraft\grqq: Drehung der mittleren Schwerkraft im Stand auf die des
+Trainings, wie in der Firmware. Quelle: Notebook~05. Alltag:
 Hüfte $9{,}3$, rechts $6{,}2$, links $6{,}8$\,min mit gezielt
 schwierigen Bewegungen (Springen, kräftiges Hinsetzen, Aufheben).}
 \label{tab:pilot}
@@ -677,22 +714,26 @@ schwierigen Bewegungen (Springen, kräftiges Hinsetzen, Aufheben).}
 \toprule
 \textbf{Modell} & \textbf{Hüfte} & \textbf{Knöchel rechts} & \textbf{Knöchel links} \\
 \midrule
-Basis (SisFall), Rohdaten          & 3/22 \,/\, 14  & 17/23 \,/\, 51 & 13/22 \,/\, 42 \\
-Basis, Achsen wie SisFall          & \textbf{15/22 \,/\, 14} & -- & -- \\
-B2 (Bein + Fuß)                    & 15/22 \,/\, 82 & 22/23 \,/\, 27 & 20/22 \,/\, 39 \\
-B2r (augmentiert)                  & 16/22 \,/\, 63 & 20/23 \,/\, 17 & 11/22 \,/\, 18 \\
-B2r, links $180^{\circ}$ gedreht    & -- & -- & \textbf{20/22 \,/\, 7} \\
+Basis (SisFall), Rohdaten          & 2/22 \,/\, 12  & 16/23 \,/\, 16 & 8/22 \,/\, 39 \\
+Basis, Achsen wie SisFall          & 15/22 \,/\, 13 & -- & -- \\
+Basis, Lage über Schwerkraft       & 13/22 \,/\, 6  & 14/23 \,/\, 9  & 15/22 \,/\, 7 \\
+B2 (Bein + Fuß)                    & 11/22 \,/\, 93 & 17/23 \,/\, 28 & 10/22 \,/\, 35 \\
+B2r (augmentiert)                  & 18/22 \,/\, 83 & 21/23 \,/\, 21 & 17/22 \,/\, 29 \\
+B2r, Lage über Schwerkraft         & \textbf{22/22 \,/\, 65} & \textbf{23/23 \,/\, 12} & \textbf{22/22 \,/\, 17} \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-Am Knöchel erkennen die Beinmodelle nahezu alle Stürze, obwohl sie
-weder diese Hardware noch diese Person gesehen haben; B2r senkt die
-Fehlalarme gegenüber B2. Mit korrekt ausgerichteter Einbaulage erreicht
-B2r links $20$ von $22$ Stürzen bei $7$ Fehlalarm-Ereignissen. Die
-verbleibenden Fehlalarme stammen aus Bewegungen, bei denen das Bein
-selbst in die Horizontale kommt (Hinsetzen, Aufheben); eine Rate je
-Stunde ist aus wenigen Minuten solcher Aufnahmen nicht ableitbar.
+Ohne Lageausgleich erkennt B2r am Knöchel 17 bis 21 der Stürze und
+liegt damit deutlich über B2. Richtet man die Aufnahmen wie die Firmware
+über die Schwerkraft aus (Neigung $35$--$47^{\circ}$ am Knöchel), erkennt
+B2r \textbf{alle 67 Stürze}, obwohl es weder diese Hardware noch diese
+Person gesehen hat; am Knöchel bei $12$ bzw.\ $17$ Fehlalarm-Ereignissen.
+Die Fehlalarme stammen aus Bewegungen, bei denen das Bein selbst in die
+Horizontale kommt (Hinsetzen, Aufheben); an der Hüfte sind es mit $65$
+in $9{,}3$\,min deutlich mehr -- sie ist aber nicht die Zielposition.
+Eine Rate je Stunde ist aus wenigen Minuten solcher Aufnahmen nicht
+ableitbar.
 
 \textbf{Kennwerte je Aktivität.} Abbildung~\ref{fig:kennwerte} zeigt zwei
 orientierungsunabhängige Kennwerte je Ereignis. Die Spitze von $|a|$
@@ -714,6 +755,22 @@ $|a| > 1{,}3$\,g). Rot hinterlegt: Bereich der Regel (zusätzlich
 $|a|_{\max} > 1{,}5$\,g). Werte unter $0{,}004$\,g auf $0{,}004$\,g gesetzt.}
 \label{fig:kennwerte}
 \end{figure}
+
+\section{Eigene Sohlenaufnahmen}
+\label{sec:sohle}
+Zum Projektende wurden mit dem Prototyp Aufnahmen in beiden Sohlen
+erstellt (eine Person, 26 Dateien, $19{,}9$\,min, $100$\,Hz,
+$\pm 16$\,g, ohne Sättigung): vier Sturzarten sowie Gehen, Joggen,
+Treppen, Springen und kräftiges Hinsetzen. Stürze auf die Knie fanden auf
+hartem Boden statt, die übrigen auf einer weichen Unterlage. Bereits ohne
+Modell zeigt sich: \textbf{Kein Sturz übertrifft die stärkste
+Alltagsbewegung.} Rechts erreicht Joggen $6{,}5$\,g, die Stürze
+$2{,}3$--$5{,}4$\,g; links Springen $7{,}7$\,g, die Stürze
+$3{,}5$--$5{,}7$\,g. Normales Gehen erreicht an der Sohle über $4$\,g und
+damit mehr, als die bisherige Partner-Sohle ($\pm 2$\,g je Achse,
+höchstens $3{,}5$\,g als Betrag) messen kann. Die Aufnahmen bestätigen
+damit an der Zielposition, dass nur die zeitliche Form trennt; ihre
+Auswertung mit dem Modell steht noch aus.
 
 \section{Kommerzielles Modell}
 \label{sec:kommerz}
@@ -745,30 +802,31 @@ Unterschied ja/nein, in welche Richtung.}
 \toprule
 \textbf{Behauptung} & \textbf{Ergebnis} & \textbf{Beleg} \\
 \midrule
-Fine-Tuning schließt die Domänenlücke & \ja & UMAFall Taille $44 \rightarrow 92\,\%$, FallAllD $13 \rightarrow 70\,\%$; Spezifität bleibt \\
-Sturzdaten vom Bein sind für das Fußmodell nötig & \ja & Schienbein $+61{,}2$\,pp (B1 vs.\ K, 5/5 Falten) \\
-Die Achsenlage erklärt den Links-rechts-Unterschied & \ja & Spiegelung links: $6 \rightarrow 60\,\%$, rechts: $55 \rightarrow 5\,\%$ \\
-Ein Gyroskop verbessert die Erkennung deutlich & \teils & RF: $62\,\%$ Gyro-Wichtigkeit; CNN an der Hüfte nur $+0{,}7$\,pp (Deckeneffekt) \\
-Höhere Abtastrate sichert den Transfer & \nein & FallAllD ($238$\,Hz) $12{,}7\,\%$, KFall ($100$\,Hz) $100\,\%$ \\
-Der Messbereich $\pm 8$\,g erklärt den FallAllD-Einbruch & \nein & Clipping auf $\pm 8$\,g: unverändert $98{,}7\,\%$ \\
-Die Position bestimmt die Leistung & \nein & Seite (Achsenlage) wiegt schwerer: Spiegeltest $6 \rightarrow 60\,\%$ \\
-Progressives Fine-Tuning hilft & \teils & $+9{,}9$\,pp bei wenig Zieldaten; bei vielen kein Unterschied (L0 vs.\ B2) \\
-Hard Negatives senken Fehlalarme sinnvoll & \nein & $+2{,}1$\,pp Sp gegen $-7{,}4$\,pp Se \\
-Voting senkt Fehlalarme & \teils & $-84\,\%$ FP, aber nur mit angepasstem Modell tragfähig \\
-Ältere erzeugen mehr Fehlalarme & \teils & Handgelenk: nur Klatschen; Sohle: ja ($373$ vs.\ $215$/h) \\
-Fußdaten ohne Stürze kosten Sensitivität & \nein & B2 vs.\ B1: Se $+0{,}6$\,pp, FP $-95\,\%$ \\
-Augmentierung kostet Sensitivität & \nein & Se $+4{,}6$\,pp, gedreht $+17{,}3$\,pp, FP geringer \\
-Das Basismodell scheitert an der eigenen Hüfte wegen der Hardware & \nein & Achsen wie SisFall: $3 \rightarrow 15$ von 22 \\
-Spitzenwerte trennen Stürze am Fuß & \nein & Alltag bis $10{,}7$\,g; Lage + Ruhe trennen \\
-Smart-Insole im Training senkt Fehlalarme weiter & \offen{} & Notebook 04, Teil E \\
+Fine-Tuning schließt die Domänenlücke & \ja & UMAFall Taille $46 \rightarrow 94\,\%$, FallAllD $11 \rightarrow 76\,\%$; Spezifität bleibt \\
+Sturzdaten vom Bein sind für das Fußmodell nötig & \ja & Schienbein $+61{,}5$\,pp (B1 vs.\ K, 5/5 Falten) \\
+Die Achsenlage erklärt den Links-rechts-Unterschied & \ja & Spiegelung links: $5 \rightarrow 54\,\%$, rechts: $47 \rightarrow 4\,\%$ \\
+Ein Gyroskop verbessert die Erkennung deutlich & \teils & RF: $62\,\%$ Gyro-Wichtigkeit; CNN an der Hüfte nur $+1{,}3$\,pp (Deckeneffekt) \\
+Höhere Abtastrate sichert den Transfer & \nein & FallAllD ($238$\,Hz) $11{,}3\,\%$, KFall ($100$\,Hz) $99{,}5\,\%$ \\
+Der Messbereich $\pm 8$\,g erklärt den FallAllD-Einbruch & \nein & Clipping auf $\pm 8$\,g: unverändert $99{,}0\,\%$ \\
+Die Position bestimmt die Leistung & \nein & Seite (Achsenlage) wiegt schwerer: Spiegeltest $5 \rightarrow 54\,\%$ \\
+Progressives Fine-Tuning hilft & \teils & $+23{,}8$\,pp bei wenig Zieldaten; bei vielen kein Unterschied (L0 vs.\ B2) \\
+Hard Negatives senken Fehlalarme sinnvoll & \nein & $+1{,}8$\,pp Sp gegen $-6{,}3$\,pp Se \\
+Voting senkt Fehlalarme & \teils & 3 von 5: $-70\,\%$ FP, aber $-40\,\%$ erkannte Stürze (UMAFall-Knöchel) \\
+Ältere erzeugen mehr Fehlalarme & \teils & Handgelenk: v.\,a.\ Klatschen, Türöffnen; Sohle: ja ($127$ vs.\ $69$/h) \\
+Fußdaten ohne Stürze kosten Sensitivität & \nein & augmentiert: Se $-0{,}2$\,pp (n.\,s.), FP $-91$ bis $-96\,\%$; ohne Augm.\ Sp $-8{,}6$\,pp \\
+Augmentierung kostet Sensitivität & \nein & Se $+0{,}8$\,pp (n.\,s.), gedreht $+17{,}9$\,pp, FP an Smart-Insole geringer \\
+Das Basismodell scheitert an der eigenen Hüfte wegen der Hardware & \nein & Achsen wie SisFall: $2 \rightarrow 15$ von 22 \\
+Spitzenwerte trennen Stürze am Fuß & \nein & Knöchel: Alltag bis $10{,}7$\,g; Sohle: Stürze $\leq 5{,}7$\,g, Joggen/Springen bis $7{,}7$\,g \\
+Smart-Insole im Training senkt Fehlalarme weiter & \teils & $28 \rightarrow 11$/h, aber Se $-2{,}0$\,pp (gesichert) \\
 Breiteres Vortraining verbessert das Fußmodell & \offen{} & Notebook 05, Teil E \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \section{Einschränkungen}
-Stürze an der Sohle wurden nicht gemessen; das Firmwaremodell ist an
-der Sohle daher nicht validiert, sondern vom Knöchel übertragen. Die
+Eigene Sohlenaufnahmen mit Stürzen liegen erst seit Projektende vor
+und sind mit dem Modell noch nicht ausgewertet; das Firmwaremodell ist
+an der Sohle daher nicht validiert, sondern vom Knöchel übertragen. Die
 Pilotdaten stammen von einer Person und enthalten nur Minuten Alltag.
 Alle Stürze sind simuliert, von überwiegend jungen Personen. Die
 Aufprallbeschriftung von CAPPIMU ist eine Näherung.
@@ -779,35 +837,37 @@ Aufprallbeschriftung von CAPPIMU ist eine Näherung.
 %==================================================================
 Eine Sturzerkennung in der Einlegesohle ist mit einer 6-Achsen-IMU und
 einem kleinen 1D-CNN auf dem ESP32-C6 umsetzbar; das Modell benötigt
-rund $80$\,KB und rechnet alle $200$\,ms. Die wesentlichen Erkenntnisse:
+rund $77$\,KB und rechnet alle $200$\,ms. Die wesentlichen Erkenntnisse:
 
 \begin{enumerate}\setlength\itemsep{1pt}
 \item \textbf{Am Fuß sind Fehlalarme das Kernproblem}, nicht die
-      Sensitivität. Ein Rumpfmodell erzeugt an der Sohle
-      $161$--$290$ Fehlalarme je Stunde, bei Älteren bis $373$.
+      Sensitivität. Ein auf Beinstürze trainiertes Modell ohne
+      Sohlendaten erzeugt an der Sohle $268$--$400$ Fehlalarme je
+      Stunde, das Rumpfmodell $65$--$101$, bei Älteren $127$.
 \item \textbf{Die richtigen Daten wirken stärker als jede andere
       Maßnahme.} Sturzdaten vom Bein heben die Sensitivität um $61$\,pp,
-      Sohlendaten ohne Stürze senken die Fehlalarme um $95\,\%$, ohne
-      Sensitivität zu kosten. Umgewichtung (Hard Negatives) und Voting
-      allein reichen nicht.
+      Sohlendaten ohne Stürze senken die Fehlalarme um $91$--$96\,\%$,
+      ohne Sensitivität zu kosten (augmentiert). Umgewichtung (Hard
+      Negatives) und Voting allein reichen nicht. Ein Grenzwert auf die
+      Spitze kann an der Sohle grundsätzlich nicht trennen.
 \item \textbf{Die Achsenlage des Sensors ist eine eigene, bislang
       übersehene Fehlerquelle.} Sie erklärt den Seitenunterschied
       vollständig und den Einbruch an der eigenen Hüfte weitgehend.
       Die Einbaulage gehört zur Modellspezifikation und wird in der
       Firmware ausgeglichen; eine Rotationsaugmentierung macht das
       Modell zusätzlich robust.
-\item \textbf{Auf der eigenen Hardware} erkennt das Beinmodell am Knöchel
-      nahezu alle Stürze einer Person.
+\item \textbf{Auf der eigenen Hardware} erkennt B2r nach Ausrichtung über
+      die Schwerkraft alle 67 Stürze einer Person an Hüfte und Knöcheln.
 \end{enumerate}
 
-\textbf{Ausblick.} (1) Aufnahmen mit dem Prototyp in \emph{beiden}
-Sohlen und mehreren Personen, einschließlich Stürzen auf Matte, um das
-Modell an der Zielposition zu validieren. (2) Zweite Stufe mit
+\textbf{Ausblick.} (1) Die vorhandenen Aufnahmen in beiden Sohlen mit
+dem Modell auswerten und um mehrere Personen und Stürze auf hartem Boden
+ergänzen, um das Modell an der Zielposition zu validieren. (2) Zweite Stufe mit
 Lageänderung und Liegephase zur Bestätigung eines Alarms und
 Langliegeerkennung. (3) Parameter der Alarmlogik ($N$, $M$, Schwelle)
 auf Sohlendaten festlegen. (4) Energiebedarf im Dauerbetrieb messen.
-(5) Für Clever-Sole das kommerzielle Modell nach Prüfung der Lizenzen
-übergeben.
+(5) Für NEARBY (vormals Clever-Sole) das kommerzielle Modell nach
+Prüfung der Lizenzen übergeben.
 
 \bibliography{references}
 
