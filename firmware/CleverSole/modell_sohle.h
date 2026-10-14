@@ -1,16 +1,23 @@
 /*
- * modell.h  --  automatisch erzeugt (BatchNorm in die Faltung gefaltet)
+ * modell.h  --  automatisch erzeugt von tools/export_firmware_model.py
  * Quelle      : fall_model_lowerlimb_aug_gefaltet.keras
  * Groesse     : 76720 Byte (int8)
  * Operatoren  : CONV_2D, EXPAND_DIMS, FULLY_CONNECTED, LOGISTIC, MAX_POOL_2D, MEAN, RESHAPE
- * Hinweis     : keine MUL/ADD mehr -- BatchNorm ist in die
- *               nachfolgenden Schichten eingerechnet.
+ * int8/float  : 99.50% gleiche Entscheidungen (Pilotdaten)
  * Nicht von Hand bearbeiten -- neu erzeugen.
  */
 #ifndef MODELL_SOHLE_H
 #define MODELL_SOHLE_H
 
 #define MODELL_VERFUEGBAR 1
+
+// Selbsttest: konstanter Eingang -> erwarteter roher int8-Ausgang.
+// Von tools/export_firmware_model.py aus genau diesem Modell
+// berechnet; die Firmware prueft damit beim Start, ob TFLM
+// dasselbe rechnet wie der Konverter.
+#define MODELL_TEST_N      5
+#define MODELL_TEST_MUSTER { 0, -5, 10, 13, -13 }
+#define MODELL_TEST_SOLL   { -128, -127, -113, 94, 56 }
 
 alignas(16) const unsigned char modell_tflite[] = {
   0x1c, 0x00, 0x00, 0x00, 0x54, 0x46, 0x4c, 0x33, 0x14, 0x00, 0x20, 0x00,

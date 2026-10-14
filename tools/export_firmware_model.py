@@ -92,6 +92,22 @@ def main():
     print(f"int8 vs. float  : {gleich:.2%} gleiche Entscheidungen auf {len(X)} Pilotfenstern, "
           f"max. |dp| = {np.abs(p_int8 - p_float).max():.3f}")
     print(f"Operatoren      : {', '.join(ops)}")
+    if {"MUL", "ADD"} & set(ops):
+        print("WARNUNG         : MUL/ADD mit Broadcast im Graphen. TFLM wertet"
+              " diese auf dem ESP32-C6 falsch aus (konstante Ausgabe)."
+              " BatchNorm vor dem Export in die Folgeschichten einrechnen.")
+
+    # --- Selbsttest: konstante Eingaben, Sollwerte fuer die Firmware ----
+    # Die Firmware rechnet dieselben Muster und vergleicht. Schlaegt der
+    # Test fehl, rechnet TFLM anders als der Konverter -- dann stimmt
+    # keine der spaeteren Zahlen.
+    muster = [0, -5, 10, 13, -13]
+    soll = []
+    for v in muster:
+        it.set_tensor(ein["index"], np.full(ein["shape"], v, np.int8))
+        it.invoke()
+        soll.append(int(it.get_tensor(aus["index"]).ravel()[0]))
+    print(f"Selbsttest      : {dict(zip(muster, soll))}")
 
     # --- modell.h schreiben ---------------------------------------------
     hexz = [", ".join(f"0x{b:02x}" for b in blob[i:i + 12])
@@ -110,6 +126,13 @@ def main():
         " */\n"
         f"#ifndef {waechter}\n#define {waechter}\n\n"
         "#define MODELL_VERFUEGBAR 1\n\n"
+        "// Selbsttest: konstanter Eingang -> erwarteter roher int8-Ausgang.\n"
+        "// Von tools/export_firmware_model.py aus genau diesem Modell\n"
+        "// berechnet; die Firmware prueft damit beim Start, ob TFLM\n"
+        "// dasselbe rechnet wie der Konverter.\n"
+        f"#define MODELL_TEST_N      {len(muster)}\n"
+        f"#define MODELL_TEST_MUSTER {{ {', '.join(str(v) for v in muster)} }}\n"
+        f"#define MODELL_TEST_SOLL   {{ {', '.join(str(v) for v in soll)} }}\n\n"
         f"alignas(16) const unsigned char modell_tflite[] = {{\n  "
         + ",\n  ".join(hexz) + "\n};\n"
         f"const unsigned int modell_tflite_len = {len(blob)};\n\n"

@@ -564,7 +564,7 @@ vollständig externer Test.
 \centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{Wirkung von Bein- und Fußdaten, fünffach kreuzvalidiert
-(1462 Sturzfenster am Schienbein).}
+(1462 Sturzfenster am Schienbein). Quelle: Notebook~04.}
 \label{tab:fussdaten}
 \begin{tabularx}{\textwidth}{l Y c c c c}
 \toprule
@@ -620,7 +620,9 @@ vergleicht fünf Trainingsketten auf denselben Falten.
 \begin{table}[H]
 \centering\small
 \caption{Trainingsketten, fünffach kreuzvalidiert. Gedreht: Mittel über
-fünf zufällige Drehungen der Testdaten.}
+fünf zufällige Drehungen der Testdaten. Quelle: Notebook~11; alle fünf
+Zeilen stammen aus demselben Lauf und denselben Falten, nur so ist der
+Vergleich zwischen den Ketten zulässig.}
 \label{tab:matrix}
 \begin{tabularx}{\textwidth}{l Y c c c c}
 \toprule
@@ -640,6 +642,15 @@ B2r & wie B2, augmentiert                     & $\mathbf{85{,}0\,\%}$ & $\mathbf
 Die Augmentierung kostet nichts und gewinnt in allen Größen: gedreht
 $+17{,}3$\,pp (KI $[+8{,}9; +25{,}8]$, 5 von 5 Falten), original
 $+4{,}6$\,pp, Spezifität an beiden Sohlendatensätzen gesichert höher.
+
+Die Fehlalarmraten dieser Tabelle sind nicht mit denen aus
+Tabelle~\ref{tab:fussdaten} vergleichbar: beide Läufe verwenden
+unterschiedliche Obergrenzen für die Alltagsstichprobe und
+unterschiedliche Zufallsstartwerte, und die Fehlalarme an der Sohle
+streuen zwischen den Falten erheblich (B1r: $65$ bis $755$/h). Für B2r
+stehen deshalb hier $4$ bzw.\ $18$/h, in Tabelle~\ref{tab:fussdaten}
+dagegen $13{,}2$ bzw.\ $28{,}0$/h. Belastbar ist jeweils nur der
+Vergleich \emph{innerhalb} einer Tabelle.
 
 \textbf{Eigene Hüfte in den SisFall-Rahmen.} SisFall definiert die Achsen
 des Gürtelsensors als $+z$ vorwärts, $+y$ nach unten, $+x$ nach rechts
