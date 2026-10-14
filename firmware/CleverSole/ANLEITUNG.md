@@ -67,12 +67,20 @@ Schlägt sie fehl (zu wenig Gehen), gilt die Montagevorgabe aus
 `modell.h`. Mit `KALIB_RICHTUNG_AUTO 0` wird „vorwärts“ nicht aus dem
 Gang, sondern aus dem X-Pfeil übernommen.
 
-**Modell:** `modell_sohle.h` (B2r, int8, ca. 80 KB). Neu erzeugen:
+**Modell:** `modell_sohle.h` (B2r, int8, ca. 77 KB). Neu erzeugen:
 
 ```bash
 pip install tensorflow
 python tools/export_firmware_model.py <modell>.keras Pilotdaten/
 ```
+
+Das Skript rechnet die BatchNorm-Schichten automatisch in die folgenden
+Faltungen ein (sonst entstehen MUL/ADD-Operationen mit Broadcast, die
+TFLM auf dem ESP32-C6 falsch auswertet: konstante Ausgabe ≈ 0,47),
+prüft int8 gegen float und schreibt die Sollwerte des Selbsttests
+(`MODELL_TEST_MUSTER` / `MODELL_TEST_SOLL`) in `modell_sohle.h`.
+Steht in der Ausgabe `MUL` oder `ADD` bei den Operatoren, das Modell
+nicht hochladen.
 
 ## 3a. Meldungen über Bluetooth
 
@@ -132,7 +140,10 @@ Wacht es nicht auf, liegt der INT-Pin falsch.
 Mit nRF Connect oder LightBlue scannen. Es muss `CleverSole-01`
 erscheinen, mit Batteriedienst.
 
-**Stufe 5 — Modell** (`MODELL_VERFUEGBAR 1`)
+**Stufe 5 — Modell** (`MODELL_VERFUEGBAR 1`, `TESTMODUS 1`)
+Beim Start erscheinen fünf Zeilen `Selbsttest i: ... OK`. Steht dort
+`FALSCH`, rechnet TFLM anders als der Konverter (zwei TFLM-Bibliotheken
+oder MUL/ADD im Modell) – dann ist jede spätere Zahl wertlos.
 Auf die Inferenzzeit achten. Bei über 150 ms wird das Intervall von
 200 ms knapp; dann `INFERENZ_INTERVALL` erhöhen.
 
@@ -140,12 +151,12 @@ Auf die Inferenzzeit achten. Bei über 150 ms wird das Intervall von
 
 **TensorFlow Lite Micro auf dem ESP32-C6.** Der Arduino-ESP32-Core 3.x
 bringt `esp-tflite-micro` bereits mit; eine zusätzliche Bibliothek ist
-dann nicht nötig. Die alte Bibliothek `TensorFlowLite_ESP32` ist
-veraltet und nicht zu verwenden. Findet der Compiler
-`tensorflow/lite/micro/micro_interpreter.h` nicht, im
-Bibliotheksverwalter `Chirale_TensorFlowLite` installieren (wird
-automatisch eingebunden). Läuft beides nicht, ist der verlässliche Weg
-ESP-IDF mit der Komponente `esp-tflite-micro`:
+nicht nötig und schadet: Sind Header und kompilierte Bibliothek aus
+verschiedenen TFLM-Versionen, läuft `Invoke()` scheinbar fehlerfrei,
+schreibt den Ausgabetensor aber nicht. Also **nur eine** TFLM-Quelle
+(`TensorFlowLite_ESP32` und `Chirale_TensorFlowLite` deinstallieren).
+Läuft es so nicht, ist der verlässliche Weg ESP-IDF mit der Komponente
+`esp-tflite-micro`:
 
 ```bash
 idf.py add-dependency "espressif/esp-tflite-micro"

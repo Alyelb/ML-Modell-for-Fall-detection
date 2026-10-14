@@ -14,6 +14,9 @@ Aufruf (im Repo-Ordner):
     Argument 3: (optional) Name der Zieldatei in firmware/CleverSole/,
                 Standard: modell_sohle.h
 
+BatchNorm-Schichten werden vorher automatisch in die folgende Faltung
+bzw. Dense-Schicht eingerechnet (siehe bn_falten).
+
 Ausgabe:
     firmware/CleverSole/<Argument 3>   C-Array, 16-Byte-ausgerichtet
     <modell>_int8.tflite             zum Archivieren
@@ -31,6 +34,55 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import fall_lib as fl  # noqa: E402
 
 
+def bn_falten(m):
+    """Rechnet jede BatchNormalization in die folgende Conv1D/Dense ein.
+
+    TFLM wertet die aus BatchNorm entstehenden MUL/ADD-Operationen mit
+    Broadcast auf dem ESP32-C6 falsch aus (konstante Ausgabe). Nach der
+    Faltung bleiben nur CONV_2D, FULLY_CONNECTED, Pooling und Aktivierung.
+    BN(x) = s*x + t je Kanal. MaxPooling darf dazwischen liegen, wenn alle
+    s > 0 (dann vertauschbar); GlobalAveragePooling und Dropout sind linear.
+    Gibt (neues Modell, Anzahl gefalteter Schichten) zurueck.
+    """
+    from tensorflow import keras
+    from tensorflow.keras import layers
+
+    neu, offen, n = [], None, 0
+    for lay in m.layers:
+        if isinstance(lay, layers.BatchNormalization):
+            g, b, mu, var = [w.astype(np.float64) for w in lay.get_weights()]
+            s = g / np.sqrt(var + lay.epsilon)
+            offen = (s, b - mu * s)
+            n += 1
+            continue
+        if offen is not None and isinstance(lay, layers.MaxPooling1D) and not np.all(offen[0] > 0):
+            raise ValueError("BatchNorm mit negativem Faktor vor MaxPooling -- nicht faltbar")
+        if offen is not None and isinstance(lay, (layers.Conv1D, layers.Dense)):
+            s, t = offen
+            W, bias = [w.astype(np.float64) for w in lay.get_weights()]
+            if isinstance(lay, layers.Conv1D):
+                W2 = W * s[None, :, None]
+                b2 = bias + np.einsum("kio,i->o", W, t)
+            else:
+                W2 = W * s[:, None]
+                b2 = bias + t @ W
+            kopie = lay.__class__.from_config(lay.get_config())
+            neu.append((kopie, [W2.astype(np.float32), b2.astype(np.float32)]))
+            offen = None
+            continue
+        kopie = lay.__class__.from_config(lay.get_config())
+        neu.append((kopie, lay.get_weights()))
+    if offen is not None:
+        raise ValueError("BatchNorm am Modellende -- keine Folgeschicht zum Einrechnen")
+    if n == 0:
+        return m, 0
+    f = keras.Sequential([layers.Input(shape=m.input_shape[1:])] + [k for k, _ in neu])
+    for k, w in neu:
+        if w:
+            k.set_weights(w)
+    return f, n
+
+
 def main():
     if len(sys.argv) < 3:
         sys.exit(__doc__)
@@ -38,7 +90,8 @@ def main():
     import tensorflow as tf
     from tensorflow import keras
 
-    m = keras.models.load_model(modell_pfad, compile=False)
+    m_orig = keras.models.load_model(modell_pfad, compile=False)
+    m, n_bn = bn_falten(m_orig)
 
     trials = fl.load_pilot(pilot, verbose=False)
     X, y, _, _ = fl.build_windows(trials, mode="sliding")
@@ -51,6 +104,12 @@ def main():
                            replace=False)]
     rng.shuffle(idx)
     X_cal = X[idx]
+    if n_bn:
+        d = np.abs(m.predict(X, batch_size=512, verbose=0)
+                   - m_orig.predict(X, batch_size=512, verbose=0)).max()
+        print(f"BatchNorm       : {n_bn} Schichten eingerechnet, max. Abweichung {d:.1e}")
+        if d > 1e-3:
+            sys.exit("Faltung weicht ab -- Export abgebrochen")
 
     def gen():
         for i in range(len(X_cal)):
