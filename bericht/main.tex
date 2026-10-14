@@ -577,8 +577,8 @@ K  & + KFall                                     & $22{,}6\,\%$ [$20{,}5$; $24{,
 B1 & + Schienbein-Stürze (\emph{ohne} Fußdaten)   & $83{,}9\,\%$ [$81{,}9$; $85{,}7$] & $98{,}8\,\%$ & 412 & 508 \\
 B2 & + ImbalanSense (Sohle, ohne Stürze)          & $\mathbf{84{,}5\,\%}$ [$82{,}5$; $86{,}2$] & $96{,}4\,\%$ & \textbf{18} & \textbf{53} \\
 \midrule
-B2r & B2 mit Augmentierung (vollst.\ nachtrainiert) & $85{,}0\,\%$ & \offen{} & $3{,}9$ & $17{,}7$ \\
-& B2r + Smart-Insole im Training               & \offen{} & \offen{} & \offen{} & \offen{} \\
+B2r & B1r + ImbalanSense, augmentiert            & $84{,}0\,\%$ [$82{,}0$; $85{,}8$] & $96{,}0\,\%$ & $\mathbf{13{,}2}$ & $\mathbf{28{,}0}$ \\
+& B2r + Smart-Insole im Training               & $82{,}1\,\%$ [$80{,}0$; $84{,}0$] & $98{,}1\,\%$ & $1{,}6$ & $11{,}1$ \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -592,8 +592,11 @@ Stürze beheben das ohne Sensitivitätsverlust}: $-95\,\%$ Fehlalarme
 (Spezifität $+10{,}9$ bzw.\ $+12{,}6$\,pp, gesichert), Sensitivität
 $+0{,}6$\,pp (nicht verschieden). Im Gegensatz zu den Hard Negatives
 werden hier keine vorhandenen Fenster umgewichtet, sondern Daten der
-Zielposition ergänzt. Ob Smart-Insole als zweite Sohlenquelle die
-Fehlalarme weiter senkt, prüft Notebook~04, Teil~E \offen{Ergebnis}.
+Zielposition ergänzt. Smart-Insole als zweite Sohlenquelle senkt die Fehlalarme zwar
+weiter ($13{,}2 \rightarrow 1{,}6$ bzw.\ $28{,}0 \rightarrow 11{,}1$/h),
+kostet aber gesichert Sensitivität ($-2{,}0$\,pp, KI $[-3{,}7; -0{,}2]$,
+nur 1 von 5 Falten). Da die Lizenz zudem nicht-kommerziell ist, bleibt
+B2r das eingesetzte Modell; die Zeile dient nur dem Bericht.
 Die Spezifität am Schienbein liegt in allen Zeilen über $96\,\%$,
 obwohl die Sensitivität zwischen $23$ und $85\,\%$ schwankt; dasselbe
 gilt für die Genauigkeit, die bei seltenen Stürzen von den Alltagsfenstern
